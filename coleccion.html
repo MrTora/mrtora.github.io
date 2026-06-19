@@ -450,6 +450,17 @@
     .editor-card-outer { width: 366px; height: 512px; flex-shrink: 0; position: relative; }
     .editor-card-scale { transform: scale(1.5); transform-origin: top left; width: 244px; height: 341px; position: absolute; top: 0; left: 0; }
 
+    /* ── Deck mode ── */
+    .mode-toggle { display: flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; align-self: flex-start; flex-shrink: 0; }
+    .mode-toggle-btn { padding: 8px 20px; font-size: 13px; font-weight: 600; background: var(--surface2); color: var(--text2); border: none; cursor: pointer; transition: all .15s; }
+    .mode-toggle-btn.active { background: var(--accent2); color: #fff; }
+    .deck-section-header { padding: 10px 16px; background: var(--surface2); border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 8px; }
+    .deck-card-row { display: flex; align-items: center; gap: 12px; padding: 8px 16px; border-bottom: 1px solid var(--border); transition: background .1s; }
+    .deck-card-row:hover { filter: brightness(1.08); }
+    .deck-card-row:last-child { border-bottom: none; }
+    .deck-progress-bar { width: 100%; height: 10px; background: var(--surface2); border-radius: 5px; overflow: hidden; }
+    .deck-progress-fill { height: 100%; border-radius: 5px; transition: width .5s ease; }
+
     @media print {
       @page { size: A4; margin: 8mm; }
       body { background: white; }
@@ -1245,13 +1256,255 @@ function FolderView({ collection, setCollection, showToast }) {
   );
 }
 
+/* ─── IMPORT DECK MODAL ─── */
+function ImportDeckModal({ onClose, onImport }) {
+  const [step, setStep] = useState(1);
+  const [deckText, setDeckText] = useState('');
+  const [deckName, setDeckName] = useState('');
+  const [parsed, setParsed] = useState([]);
+  const [error, setError] = useState('');
+
+  const parseText = () => {
+    const lines = deckText.trim().split('\n');
+    const entries = [];
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed === 'Deck' || trimmed === 'Sideboard') continue;
+      const m = trimmed.match(/^(\d+)\s+(.+?)\s+\(([A-Za-z0-9]+)\)\s+(\d+\w*)$/);
+      if (m) entries.push({ qty: parseInt(m[1]), name: m[2].trim(), set: m[3].toUpperCase(), number: m[4] });
+    }
+    if (entries.length === 0) { setError('No se encontraron cartas válidas. Revisa el formato.'); return; }
+    setParsed(entries);
+    setError('');
+    setStep(2);
+  };
+
+  const confirm = () => {
+    if (!deckName.trim()) return;
+    onImport({ id: `deck-${Date.now()}`, name: deckName.trim(), entries: parsed });
+    onClose();
+  };
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" style={{maxWidth:'560px'}} onClick={e => e.stopPropagation()}>
+        <div className="modal-header">
+          <h3>🃏 Importar Deck</h3>
+          <button className="icon-btn" onClick={onClose}>✕</button>
+        </div>
+        {step === 1 ? (
+          <>
+            <p style={{fontSize:'13px',color:'var(--text2)',marginBottom:'12px',lineHeight:'1.5'}}>
+              Pega la lista en formato MTGA. Cada línea: <code style={{color:'var(--accent)',background:'var(--surface2)',padding:'1px 5px',borderRadius:'4px'}}>4 Goblin Surprise (FDN) 200</code>
+            </p>
+            <textarea
+              autoFocus
+              value={deckText}
+              onChange={e => setDeckText(e.target.value)}
+              placeholder={"Deck\n4 Goblin Surprise (FDN) 200\n2 Mountain (ANB) 114\n1 Krenko, Mob Boss (FDN) 204\n..."}
+              style={{
+                width:'100%', minHeight:'280px', background:'var(--surface2)', border:'1px solid var(--border)',
+                borderRadius:'8px', padding:'12px', color:'var(--text)', fontSize:'13px', lineHeight:'1.6',
+                resize:'vertical', fontFamily:'monospace', display:'block',
+              }}
+            />
+            {error && <p style={{color:'var(--danger)',fontSize:'13px',marginTop:'8px'}}>{error}</p>}
+            <div style={{display:'flex',gap:'8px',marginTop:'14px',justifyContent:'flex-end'}}>
+              <button className="btn btn-secondary" onClick={onClose}>Cancelar</button>
+              <button className="btn btn-primary" onClick={parseText} disabled={!deckText.trim()}>Siguiente →</button>
+            </div>
+          </>
+        ) : (
+          <>
+            <p style={{fontSize:'13px',color:'var(--text2)',marginBottom:'12px',lineHeight:'1.5'}}>
+              Se encontraron <strong style={{color:'var(--text)'}}>{parsed.length} cartas distintas</strong> ({parsed.reduce((s,e)=>s+e.qty,0)} copias en total). ¿Cómo se llama este deck?
+            </p>
+            <input
+              autoFocus
+              value={deckName}
+              onChange={e => setDeckName(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') confirm(); }}
+              placeholder="Nombre del deck…"
+              style={{
+                width:'100%', background:'var(--surface2)', border:'1px solid var(--border)',
+                borderRadius:'8px', padding:'10px 14px', color:'var(--text)', fontSize:'15px',
+                marginBottom:'14px', display:'block',
+              }}
+            />
+            <div style={{display:'flex',gap:'8px',justifyContent:'flex-end'}}>
+              <button className="btn btn-secondary" onClick={() => setStep(1)}>← Atrás</button>
+              <button className="btn btn-primary" onClick={confirm} disabled={!deckName.trim()}>✅ Crear Deck</button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ─── DECK VIEW ─── */
+function DeckView({ deck, allCollectionCards }) {
+  const [cardData, setCardData] = useState({});
+  const [loadingCards, setLoadingCards] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function fetchAll() {
+      setLoadingCards(true);
+      const data = {};
+      for (const entry of deck.entries) {
+        if (cancelled) break;
+        try {
+          const r = await fetch(`https://api.scryfall.com/cards/${entry.set.toLowerCase()}/${entry.number}`);
+          const d = await r.json();
+          if (d.object !== 'error') {
+            data[entry.name] = {
+              img: d.image_uris?.small || d.card_faces?.[0]?.image_uris?.small || '',
+              typeLine: d.type_line || '',
+              manaCost: d.mana_cost || '',
+            };
+          }
+        } catch {}
+        await new Promise(res => setTimeout(res, 60));
+      }
+      if (!cancelled) { setCardData(data); setLoadingCards(false); }
+    }
+    fetchAll();
+    return () => { cancelled = true; };
+  }, [deck.id]);
+
+  const getOwned = name => allCollectionCards
+    .filter(c => c.name.toLowerCase() === name.toLowerCase())
+    .reduce((sum, c) => sum + c.count, 0);
+
+  const getType = entry => {
+    const tl = (cardData[entry.name]?.typeLine || '').toLowerCase();
+    if (tl.includes('creature'))     return 'creature';
+    if (tl.includes('planeswalker')) return 'planeswalker';
+    if (tl.includes('instant'))      return 'instant';
+    if (tl.includes('sorcery'))      return 'sorcery';
+    if (tl.includes('enchantment'))  return 'enchantment';
+    if (tl.includes('artifact'))     return 'artifact';
+    if (tl.includes('land'))         return 'land';
+    return 'other';
+  };
+
+  const TYPE_ORDER = [
+    { key: 'creature',     label: '🦎 Criaturas' },
+    { key: 'planeswalker', label: '✨ Planeswalkers' },
+    { key: 'instant',      label: '⚡ Instantáneos' },
+    { key: 'sorcery',      label: '🌀 Conjuros' },
+    { key: 'enchantment',  label: '🔮 Encantamientos' },
+    { key: 'artifact',     label: '⚙️ Artefactos' },
+    { key: 'land',         label: '🏔️ Tierras' },
+    { key: 'other',        label: '❓ Otros' },
+  ];
+
+  const grouped = {};
+  for (const g of TYPE_ORDER) grouped[g.key] = [];
+  for (const entry of deck.entries) grouped[getType(entry)].push(entry);
+
+  const totalNeeded  = deck.entries.reduce((s, e) => s + e.qty, 0);
+  const totalOwned   = deck.entries.reduce((s, e) => s + Math.min(e.qty, getOwned(e.name)), 0);
+  const uniqueNeeded = deck.entries.length;
+  const uniqueOwned  = deck.entries.filter(e => getOwned(e.name) >= e.qty).length;
+  const pct = totalNeeded > 0 ? Math.round(totalOwned / totalNeeded * 100) : 0;
+  const pctColor = pct === 100 ? '#4ade80' : pct >= 50 ? 'var(--accent)' : 'var(--danger)';
+
+  const fallbackImg = `data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='36' height='50'><rect width='36' height='50' rx='3' fill='%23333'/><text x='18' y='28' text-anchor='middle' fill='%23666' font-size='9'>?</text></svg>`;
+
+  return (
+    <div style={{display:'flex',flexDirection:'column',gap:'16px'}}>
+      {/* Completion stats */}
+      <div className="stats-bar" style={{flexDirection:'column',gap:'12px'}}>
+        <div style={{display:'flex',gap:'24px',flexWrap:'wrap',alignItems:'center'}}>
+          <div className="stat-item">
+            <span className="stat-value" style={{fontSize:'28px',color:pctColor}}>{pct}%</span>
+            <span className="stat-label">Completitud del mazo</span>
+          </div>
+          <div className="stat-item">
+            <span className="stat-value">{totalOwned}/{totalNeeded}</span>
+            <span className="stat-label">Copias disponibles</span>
+          </div>
+          <div className="stat-item">
+            <span className="stat-value">{uniqueOwned}/{uniqueNeeded}</span>
+            <span className="stat-label">Cartas completas</span>
+          </div>
+          {loadingCards && (
+            <div style={{display:'flex',alignItems:'center',gap:'8px',color:'var(--text2)',fontSize:'12px',marginLeft:'auto'}}>
+              <div className="spinner"/> Cargando info de cartas…
+            </div>
+          )}
+        </div>
+        <div className="deck-progress-bar">
+          <div className="deck-progress-fill" style={{width:`${pct}%`,background:pctColor}} />
+        </div>
+      </div>
+
+      {/* Type sections */}
+      {TYPE_ORDER.map(({ key, label }) => {
+        const entries = grouped[key];
+        if (!entries || entries.length === 0) return null;
+        const secCount = entries.reduce((s, e) => s + e.qty, 0);
+        return (
+          <div key={key} style={{background:'var(--surface)',border:'1px solid var(--border)',borderRadius:'12px',overflow:'hidden'}}>
+            <div className="deck-section-header">
+              <span style={{fontSize:'15px',fontWeight:700,color:'var(--text)'}}>{label}</span>
+              <span style={{fontSize:'12px',color:'var(--text2)',marginLeft:'auto'}}>{secCount} {secCount===1?'carta':'cartas'}</span>
+            </div>
+            {entries.map(entry => {
+              const owned   = getOwned(entry.name);
+              const needed  = entry.qty;
+              const complete = owned >= needed;
+              const partial  = owned > 0 && owned < needed;
+              const img      = cardData[entry.name]?.img || '';
+              const tl       = cardData[entry.name]?.typeLine || '';
+              const statusColor = complete ? '#4ade80' : partial ? 'var(--accent)' : 'var(--danger)';
+              const rowBg    = complete
+                ? 'rgba(74,222,128,.04)'
+                : partial ? 'rgba(196,154,42,.05)' : 'rgba(224,85,85,.05)';
+              return (
+                <div key={`${entry.name}-${entry.set}`} className="deck-card-row" style={{background:rowBg}}>
+                  <img
+                    src={img || fallbackImg}
+                    alt={entry.name}
+                    style={{width:'36px',height:'50px',objectFit:'cover',borderRadius:'4px',flexShrink:0,background:'var(--surface2)'}}
+                    onError={e => { e.target.src = fallbackImg; }}
+                  />
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontWeight:600,fontSize:'14px',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>
+                      {entry.name}
+                    </div>
+                    <div style={{fontSize:'11px',color:'var(--text2)'}}>
+                      {entry.set} #{entry.number}
+                      {tl && <span style={{marginLeft:'6px',opacity:.65}}>{tl.split('—')[0].trim()}</span>}
+                    </div>
+                  </div>
+                  <div style={{textAlign:'right',flexShrink:0,minWidth:'52px'}}>
+                    <div style={{fontSize:'14px',fontWeight:700,color:statusColor}}>{owned}/{needed}</div>
+                    <div style={{fontSize:'10px',color:'var(--text2)'}}>
+                      {complete ? 'Completa' : partial ? 'Parcial' : 'Falta'}
+                    </div>
+                  </div>
+                  <div style={{fontSize:'18px',flexShrink:0,width:'22px',textAlign:'center'}}>
+                    {complete ? '✅' : partial ? '⚠️' : '❌'}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 /* ─── COLLECTION SECTION (folder manager) ─── */
 function CollectionSection({ showToast }) {
   const [folders, setFolders] = useState(() => {
     try {
       const saved = localStorage.getItem('mtg_folders');
       if (saved) return JSON.parse(saved);
-      // Migrate old single collection
       const old = localStorage.getItem('mtg_collection');
       if (old) {
         const cards = JSON.parse(old);
@@ -1264,9 +1517,34 @@ function CollectionSection({ showToast }) {
   const [activeFolderId, setActiveFolderId] = useState(null);
   const activeId = activeFolderId || folders[0]?.id;
 
-  useEffect(() => {
-    localStorage.setItem('mtg_folders', JSON.stringify(folders));
-  }, [folders]);
+  // ── Decks state ──
+  const [decks, setDecks] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('mtg_decks') || '[]'); } catch { return []; }
+  });
+  const [viewMode, setViewMode] = useState('collection'); // 'collection' | 'decks'
+  const [activeDeckId, setActiveDeckId] = useState(null);
+  const [showImportDeck, setShowImportDeck] = useState(false);
+
+  useEffect(() => { localStorage.setItem('mtg_folders', JSON.stringify(folders)); }, [folders]);
+  useEffect(() => { localStorage.setItem('mtg_decks',   JSON.stringify(decks));   }, [decks]);
+
+  // All cards across all folders (for deck completion check)
+  const allCollectionCards = folders.flatMap(f => f.cards);
+
+  const importDeck = deck => {
+    setDecks(prev => [...prev, deck]);
+    setActiveDeckId(deck.id);
+    showToast(`✅ Deck "${deck.name}" importado — ${deck.entries.length} cartas distintas`);
+  };
+
+  const deleteDeck = id => {
+    setDecks(prev => {
+      const next = prev.filter(d => d.id !== id);
+      if (activeDeckId === id) setActiveDeckId(next[0]?.id || null);
+      return next;
+    });
+    showToast('🗑 Deck eliminado');
+  };
 
   const updateFolderCards = (id, cards) =>
     setFolders(prev => prev.map(f => f.id === id ? {...f, cards} : f));
@@ -1294,8 +1572,7 @@ function CollectionSection({ showToast }) {
     showToast(`📤 "${folder.name}" exportada`);
   };
 
-  // New / rename modal
-  const [folderModal, setFolderModal] = useState(null); // null | {mode:'new'|'rename', folderId?}
+  const [folderModal, setFolderModal] = useState(null);
   const [folderName, setFolderName] = useState('');
 
   const openRename = (folder, e) => {
@@ -1316,7 +1593,6 @@ function CollectionSection({ showToast }) {
     setFolderModal(null);
   };
 
-  // Import as new folder
   const importRef = useRef();
   const [importPending, setImportPending] = useState(null);
   const [importFolderName, setImportFolderName] = useState('');
@@ -1330,11 +1606,9 @@ function CollectionSection({ showToast }) {
         const raw = JSON.parse(ev.target.result);
         let cards, suggestedName;
         if (Array.isArray(raw)) {
-          cards = raw;
-          suggestedName = file.name.replace(/\.[^.]+$/, '') || 'Importada';
+          cards = raw; suggestedName = file.name.replace(/\.[^.]+$/, '') || 'Importada';
         } else if (raw.version === 1 && raw.cards) {
-          cards = raw.cards;
-          suggestedName = raw.folderName || 'Importada';
+          cards = raw.cards; suggestedName = raw.folderName || 'Importada';
         } else { throw new Error(); }
         setImportPending({ cards, suggestedName });
         setImportFolderName(suggestedName);
@@ -1355,51 +1629,108 @@ function CollectionSection({ showToast }) {
   };
 
   const activeFolder = folders.find(f => f.id === activeId) || folders[0];
+  const activeDeck   = decks.find(d => d.id === (activeDeckId || decks[0]?.id)) || decks[0];
 
   return (
     <div className="collection-layout">
-      <h2 className="section-title">Mi Colección</h2>
-      <p className="section-sub">Organiza tus cartas en carpetas · Exporta y comparte colecciones completas</p>
-
-      {/* ── Folders bar ── */}
-      <div className="folders-bar">
-        {folders.map(f => {
-          const totalCards = f.cards.reduce((a, c) => a + c.count, 0);
-          return (
-            <div key={f.id} className={`folder-tab${f.id === activeId ? ' active' : ''}`} onClick={() => setActiveFolderId(f.id)}>
-              <span className="folder-tab-icon">📁</span>
-              <div className="folder-tab-info">
-                <div className="folder-tab-name">{f.name}</div>
-                <div className="folder-tab-count">{totalCards} {totalCards === 1 ? 'carta' : 'cartas'}</div>
-              </div>
-              <div className="folder-tab-actions">
-                <button className="folder-action-btn" title="Renombrar" onClick={e => openRename(f, e)}>✏️</button>
-                <button className="folder-action-btn" title="Exportar JSON" onClick={e => exportFolder(f, e)}>📤</button>
-                <button className="folder-action-btn danger" title="Eliminar carpeta" onClick={e => deleteFolder(f.id, e)}>🗑</button>
-              </div>
-            </div>
-          );
-        })}
-        <button className="new-folder-btn" onClick={() => { setFolderModal({ mode: 'new' }); setFolderName(''); }}>
-          ＋ Nueva carpeta
-        </button>
-        <input type="file" accept=".json" ref={importRef} onChange={handleImportFile} style={{ display: 'none' }} />
-        <button className="new-folder-btn" onClick={() => importRef.current.click()}>
-          📥 Importar
-        </button>
+      {/* Title + mode toggle */}
+      <div style={{display:'flex',alignItems:'flex-start',gap:'12px',flexWrap:'wrap'}}>
+        <div>
+          <h2 className="section-title">Mi Colección</h2>
+          <p className="section-sub">Organiza tus cartas en carpetas · Importa decks y comprueba tu completitud</p>
+        </div>
+        <div className="mode-toggle" style={{marginLeft:'auto',marginTop:'4px'}}>
+          <button className={`mode-toggle-btn${viewMode==='collection'?' active':''}`} onClick={()=>setViewMode('collection')}>
+            📦 Colección
+          </button>
+          <button className={`mode-toggle-btn${viewMode==='decks'?' active':''}`} onClick={()=>setViewMode('decks')}>
+            🃏 Decks{decks.length > 0 ? ` (${decks.length})` : ''}
+          </button>
+        </div>
       </div>
 
-      {/* ── Active folder ── */}
-      {activeFolder && (
-        <FolderView
-          key={activeFolder.id}
-          collection={activeFolder.cards}
-          setCollection={cards => updateFolderCards(activeFolder.id, cards)}
-          showToast={showToast}
-        />
+      {viewMode === 'collection' ? (
+        <>
+          {/* ── Folders bar ── */}
+          <div className="folders-bar">
+            {folders.map(f => {
+              const totalCards = f.cards.reduce((a, c) => a + c.count, 0);
+              return (
+                <div key={f.id} className={`folder-tab${f.id === activeId ? ' active' : ''}`} onClick={() => setActiveFolderId(f.id)}>
+                  <span className="folder-tab-icon">📁</span>
+                  <div className="folder-tab-info">
+                    <div className="folder-tab-name">{f.name}</div>
+                    <div className="folder-tab-count">{totalCards} {totalCards === 1 ? 'carta' : 'cartas'}</div>
+                  </div>
+                  <div className="folder-tab-actions">
+                    <button className="folder-action-btn" title="Renombrar" onClick={e => openRename(f, e)}>✏️</button>
+                    <button className="folder-action-btn" title="Exportar JSON" onClick={e => exportFolder(f, e)}>📤</button>
+                    <button className="folder-action-btn danger" title="Eliminar carpeta" onClick={e => deleteFolder(f.id, e)}>🗑</button>
+                  </div>
+                </div>
+              );
+            })}
+            <button className="new-folder-btn" onClick={() => { setFolderModal({ mode: 'new' }); setFolderName(''); }}>
+              ＋ Nueva carpeta
+            </button>
+            <input type="file" accept=".json" ref={importRef} onChange={handleImportFile} style={{ display: 'none' }} />
+            <button className="new-folder-btn" onClick={() => importRef.current.click()}>
+              📥 Importar
+            </button>
+          </div>
+
+          {activeFolder && (
+            <FolderView
+              key={activeFolder.id}
+              collection={activeFolder.cards}
+              setCollection={cards => updateFolderCards(activeFolder.id, cards)}
+              showToast={showToast}
+            />
+          )}
+        </>
+      ) : (
+        <>
+          {/* ── Decks bar ── */}
+          <div className="folders-bar">
+            {decks.map(d => {
+              const totalCards = d.entries.reduce((s,e) => s+e.qty, 0);
+              const owned      = d.entries.reduce((s,e) => s + Math.min(e.qty, allCollectionCards.filter(c=>c.name.toLowerCase()===e.name.toLowerCase()).reduce((x,c)=>x+c.count,0)), 0);
+              const pct        = totalCards > 0 ? Math.round(owned/totalCards*100) : 0;
+              const pctColor   = pct===100 ? '#4ade80' : pct>=50 ? 'var(--accent)' : 'var(--danger)';
+              return (
+                <div key={d.id} className={`folder-tab${d.id===(activeDeck?.id)?' active':''}`} onClick={()=>setActiveDeckId(d.id)}>
+                  <span className="folder-tab-icon">🃏</span>
+                  <div className="folder-tab-info">
+                    <div className="folder-tab-name">{d.name}</div>
+                    <div className="folder-tab-count" style={{color:pctColor,fontWeight:700}}>{pct}% · {totalCards} cartas</div>
+                  </div>
+                  <div className="folder-tab-actions">
+                    <button className="folder-action-btn danger" title="Eliminar deck" onClick={e=>{e.stopPropagation();deleteDeck(d.id);}}>🗑</button>
+                  </div>
+                </div>
+              );
+            })}
+            <button className="new-folder-btn" onClick={() => setShowImportDeck(true)}>
+              📥 Importar Deck
+            </button>
+          </div>
+
+          {activeDeck ? (
+            <DeckView key={activeDeck.id} deck={activeDeck} allCollectionCards={allCollectionCards} />
+          ) : (
+            <div className="empty-state">
+              <div className="icon">🃏</div>
+              <h3>Sin decks importados</h3>
+              <p>Importa un deck para ver su completitud con tu colección</p>
+              <button className="btn btn-primary" style={{marginTop:'16px'}} onClick={()=>setShowImportDeck(true)}>
+                📥 Importar Deck
+              </button>
+            </div>
+          )}
+        </>
       )}
 
-      {/* ── New / Rename modal ── */}
+      {/* ── New / Rename folder modal ── */}
       {folderModal && (
         <div className="folder-modal-overlay" onClick={() => setFolderModal(null)}>
           <div className="folder-modal" onClick={e => e.stopPropagation()}>
@@ -1421,7 +1752,7 @@ function CollectionSection({ showToast }) {
         </div>
       )}
 
-      {/* ── Import: name the new folder ── */}
+      {/* ── Import folder JSON modal ── */}
       {importPending && (
         <div className="folder-modal-overlay" onClick={() => setImportPending(null)}>
           <div className="folder-modal" onClick={e => e.stopPropagation()}>
@@ -1442,6 +1773,14 @@ function CollectionSection({ showToast }) {
             </div>
           </div>
         </div>
+      )}
+
+      {/* ── Import Deck modal ── */}
+      {showImportDeck && (
+        <ImportDeckModal
+          onClose={() => setShowImportDeck(false)}
+          onImport={importDeck}
+        />
       )}
     </div>
   );
