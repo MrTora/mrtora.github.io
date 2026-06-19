@@ -1,0 +1,1478 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MTG Proxy Studio — Mi Colección</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.development.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.development.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0f0f13; --surface: #1a1a24; --surface2: #23232f; --border: #2e2e3e;
+      --accent: #c49a2a; --accent2: #8b5cf6; --text: #e8e8f0; --text2: #8888aa;
+      --danger: #e05555; --radius: 8px;
+    }
+    body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; min-height: 100vh; }
+    button { cursor: pointer; border: none; font-family: inherit; }
+    input, select, textarea { font-family: inherit; }
+    .app { display: flex; flex-direction: column; min-height: 100vh; }
+
+    /* Header */
+    .header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 24px; display: flex; align-items: center; gap: 20px; height: 58px; }
+    .header-logo { font-size: 20px; font-weight: 700; color: var(--accent); letter-spacing: 1px; }
+    .header-logo span { color: var(--text2); font-weight: 400; }
+    .nav { display: flex; gap: 4px; margin-left: auto; }
+    .nav-btn { padding: 7px 16px; border-radius: var(--radius); background: transparent; color: var(--text2); font-size: 14px; font-weight: 500; transition: all .15s; }
+    .nav-btn:hover { background: var(--surface2); color: var(--text); }
+    .nav-btn.active { background: var(--accent2); color: #fff; }
+    .nav-btn { text-decoration: none; display: inline-flex; align-items: center; }
+    .main { flex: 1; padding: 28px 24px; max-width: 1400px; margin: 0 auto; width: 100%; }
+    .section-title { font-size: 22px; font-weight: 700; color: var(--text); margin-bottom: 4px; }
+    .section-sub { color: var(--text2); font-size: 14px; margin-bottom: 24px; }
+
+    /* Editor layout */
+    .editor-layout {
+      display: grid;
+      grid-template-columns: 360px 1fr;
+      gap: 28px;
+      align-items: start;
+    }
+    @media (max-width: 960px) {
+      .editor-layout { grid-template-columns: 1fr; }
+    }
+
+    /* Form panel — altura máxima y scroll propio */
+    .form-panel {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+      padding: 20px; display: flex; flex-direction: column; gap: 13px;
+      max-height: calc(100vh - 58px - 56px);
+      overflow-y: auto; overflow-x: hidden;
+      scrollbar-width: thin; scrollbar-color: var(--border) transparent;
+    }
+    .form-panel::-webkit-scrollbar { width: 5px; }
+    .form-panel::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+    .form-panel::-webkit-scrollbar-track { background: transparent; }
+
+    /* Preview panel — sticky, la carta queda siempre visible */
+    .preview-panel {
+      display: flex; flex-direction: column; gap: 16px;
+      position: sticky;
+      top: 28px;
+    }
+    .form-row { display: flex; flex-direction: column; gap: 5px; }
+    .form-row label { font-size: 11px; color: var(--text2); font-weight: 600; text-transform: uppercase; letter-spacing: .5px; }
+    .form-row input, .form-row select, .form-row textarea { background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; color: var(--text); font-size: 13px; transition: border .15s; }
+    .form-row input:focus, .form-row select:focus, .form-row textarea:focus { outline: none; border-color: var(--accent2); }
+    .form-row textarea { resize: vertical; min-height: 68px; line-height: 1.5; }
+    .form-row select option { background: #1a1a24; }
+    .form-two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .form-three { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+    .form-row input[type=range] { padding: 4px 0; accent-color: var(--accent2); }
+
+    /* Color pips */
+    .color-grid { display: flex; gap: 7px; flex-wrap: wrap; margin-top: 2px; }
+    .color-btn { width: 32px; height: 32px; border-radius: 50%; border: 2px solid transparent; font-size: 15px; display: flex; align-items: center; justify-content: center; transition: all .15s; opacity: .45; }
+    .color-btn.selected { border-color: #fff; opacity: 1; transform: scale(1.12); box-shadow: 0 0 8px rgba(255,255,255,.4); }
+
+    /* Frame selector */
+    .frame-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 7px; }
+    .frame-opt { border: 2px solid var(--border); border-radius: 7px; padding: 7px 4px; text-align: center; cursor: pointer; transition: all .15s; background: var(--surface2); position: relative; }
+    .frame-opt:hover { border-color: var(--accent); }
+    .frame-opt.selected { border-color: var(--accent2); background: rgba(139,92,246,.15); }
+    .frame-opt-preview { width: 100%; height: 46px; border-radius: 4px; margin-bottom: 4px; object-fit: cover; }
+    .frame-opt-label { font-size: 10px; color: var(--text2); font-weight: 600; }
+    .frame-opt-delete { position: absolute; top: 3px; right: 3px; width: 16px; height: 16px; border-radius: 50%; background: var(--danger); color: #fff; font-size: 9px; display: flex; align-items: center; justify-content: center; opacity: 0; transition: opacity .15s; border: none; line-height: 1; }
+    .frame-opt:hover .frame-opt-delete { opacity: 1; }
+    .frame-custom-section { margin-top: 8px; }
+    .frame-custom-label { font-size: 10px; color: var(--text2); font-weight: 700; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 5px; }
+    .frame-add-btn { border: 2px dashed var(--border); border-radius: 7px; padding: 7px 4px; text-align: center; cursor: pointer; transition: all .15s; background: transparent; color: var(--text2); font-size: 20px; height: 74px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; }
+    .frame-add-btn:hover { border-color: var(--accent); color: var(--accent); }
+    .frame-add-btn span { font-size: 9px; font-weight: 600; text-transform: uppercase; letter-spacing: .4px; }
+    /* Custom frame overlay on card — behind all content (object-fit aplicado inline) */
+    .card-frame-overlay { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 0; }
+
+    /* Art upload */
+    .art-upload-area { border: 2px dashed var(--border); border-radius: 8px; padding: 14px; text-align: center; cursor: pointer; transition: all .15s; background: var(--surface2); }
+    .art-upload-area:hover { border-color: var(--accent); }
+    .art-preview { width: 100%; height: 90px; object-fit: cover; border-radius: 6px; }
+    .art-upload-text { color: var(--text2); font-size: 12px; }
+
+    /* Sliders row */
+    .slider-label { display: flex; justify-content: space-between; align-items: center; }
+    .slider-value { font-size: 11px; color: var(--accent); font-weight: 600; }
+
+    /* Buttons */
+    .btn { padding: 9px 18px; border-radius: 7px; font-size: 14px; font-weight: 600; transition: all .15s; }
+    .btn-primary { background: var(--accent); color: #000; }
+    .btn-primary:hover { background: #d4aa3a; }
+    .btn-secondary { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+    .btn-secondary:hover { border-color: var(--accent2); }
+    .btn-row { display: flex; gap: 10px; flex-wrap: wrap; }
+
+    .preview-label { font-size: 11px; color: var(--text2); font-weight: 600; text-transform: uppercase; letter-spacing: .5px; }
+    .card-wrap { display: flex; gap: 24px; flex-wrap: wrap; align-items: flex-start; }
+    .print-hint { font-size: 12px; color: var(--text2); }
+
+    /* =============================================
+       MAGIC CARD — MODERN FRAME
+       Dimensiones oficiales: 63 × 88mm | ratio exacto 63:88
+       A 244px de ancho → altura = 244 × (88/63) = 341px
+       Radio de esquinas: 3mm × (244/63) ≈ 12px
+       ============================================= */
+    .mtg-card {
+      width: 244px; height: 341px;
+      border-radius: 12px;
+      position: relative; overflow: hidden;
+      box-shadow: 0 8px 32px rgba(0,0,0,.7), inset 0 0 0 1px rgba(255,255,255,.05);
+      flex-shrink: 0;
+      user-select: none;
+    }
+
+    /* ── MODERN frame ── */
+    .mtg-card.frame-modern-W { background: linear-gradient(170deg,#f7eecc 0%,#e8d590 40%,#c8b060 100%); border: 3px solid #9a8240; }
+    .mtg-card.frame-modern-U { background: linear-gradient(170deg,#8ec4e8 0%,#3a82b8 40%,#1a5090 100%); border: 3px solid #1a4878; }
+    .mtg-card.frame-modern-B { background: linear-gradient(170deg,#686878 0%,#383848 40%,#181820 100%); border: 3px solid #101018; }
+    .mtg-card.frame-modern-R { background: linear-gradient(170deg,#f09060 0%,#c85030 40%,#902010 100%); border: 3px solid #701808; }
+    .mtg-card.frame-modern-G { background: linear-gradient(170deg,#80c870 0%,#389840 40%,#186020 100%); border: 3px solid #104818; }
+    .mtg-card.frame-modern-M { background: linear-gradient(170deg,#f0d870 0%,#c8a820 40%,#906800 100%); border: 3px solid #705000; }
+    .mtg-card.frame-modern-A { background: linear-gradient(170deg,#d0d8e0 0%,#9098a8 40%,#606878 100%); border: 3px solid #485060; }
+    .mtg-card.frame-modern-C { background: linear-gradient(170deg,#b0b0b8 0%,#787880 40%,#484850 100%); border: 3px solid #303038; }
+    .mtg-card.frame-modern-L { background: linear-gradient(170deg,#d0b878 0%,#a07838 40%,#704818 100%); border: 3px solid #503010; }
+
+    /* ── CLASSIC (pre-8th) frame ── */
+    .mtg-card.frame-classic-W { background: #e8ddba; border: 6px solid #ccc0a0; }
+    .mtg-card.frame-classic-U { background: #7aa8d0; border: 6px solid #4870a0; }
+    .mtg-card.frame-classic-B { background: #3a3a4a; border: 6px solid #1a1a2a; }
+    .mtg-card.frame-classic-R { background: #d06840; border: 6px solid #a04020; }
+    .mtg-card.frame-classic-G { background: #508848; border: 6px solid #2a6028; }
+    .mtg-card.frame-classic-M { background: linear-gradient(135deg,#d0b820,#e8e880,#d0b820,#e8e880); border: 6px solid #a08010; }
+    .mtg-card.frame-classic-A { background: #b0b8c8; border: 6px solid #808898; }
+    .mtg-card.frame-classic-C { background: #a0a0a8; border: 6px solid #606068; }
+    .mtg-card.frame-classic-L { background: #b89060; border: 6px solid #886030; }
+
+    /* ── BORDERLESS frame ── */
+    .mtg-card.frame-borderless { border: 2px solid rgba(255,255,255,.22); background: linear-gradient(160deg,#12101e 0%,#0a0a18 55%,#060610 100%); border-radius: 14px; }
+
+    /* ── SHOWCASE frame ── */
+    .mtg-card.frame-showcase-W { background: linear-gradient(135deg,#f7f0d8,#ffe8a0,#f0d880,#fffaee); border: 4px solid #c8a840; border-radius: 8px; }
+    .mtg-card.frame-showcase-U { background: linear-gradient(135deg,#1a3060,#2a5090,#1a3060,#3060a0); border: 4px solid #80a8d0; border-radius: 8px; }
+    .mtg-card.frame-showcase-B { background: linear-gradient(135deg,#0a0a10,#1a1a28,#0a0a10,#202030); border: 4px solid #6060a0; border-radius: 8px; }
+    .mtg-card.frame-showcase-R { background: linear-gradient(135deg,#500800,#900000,#500800,#c01000); border: 4px solid #e04020; border-radius: 8px; }
+    .mtg-card.frame-showcase-G { background: linear-gradient(135deg,#082010,#104020,#082010,#186030); border: 4px solid #40a840; border-radius: 8px; }
+    .mtg-card.frame-showcase-M { background: linear-gradient(135deg,#302000,#705000,#302000,#906800); border: 4px solid #d0a820; border-radius: 8px; }
+    .mtg-card.frame-showcase-A { background: linear-gradient(135deg,#101820,#203040,#101820,#2a3850); border: 4px solid #7090b0; border-radius: 8px; }
+    .mtg-card.frame-showcase-C { background: linear-gradient(135deg,#181818,#303030,#181818,#282828); border: 4px solid #909090; border-radius: 8px; }
+    .mtg-card.frame-showcase-L { background: linear-gradient(135deg,#201000,#503010,#201000,#604020); border: 4px solid #c09040; border-radius: 8px; }
+
+    /* ── Card inner layout (shared) ── */
+    .card-inner { position: absolute; inset: 0; display: flex; flex-direction: column; padding: 6px; gap: 3px; z-index: 1; }
+
+    /* ── Custom frame activo: todos los fondos CSS transparentes (el PNG provee el diseño) ── */
+    .frame-custom .card-namebar { background: transparent !important; border: none !important; }
+    .frame-custom .card-typebar { background: transparent !important; border: none !important; }
+    .frame-custom .card-textbox { background: transparent !important; border: none !important; }
+    .frame-custom .card-art    { border-color: transparent !important; }
+
+    /* ── Zona segura overlay (solo en editor, no se imprime) ── */
+    .safe-zone-wrap { position: absolute; inset: 0; pointer-events: none; z-index: 20; }
+    /* Línea de corte = borde exterior de la carta */
+    .sz-cut  { position: absolute; inset: 0; border: 2px solid rgba(255,60,60,.7); border-radius: 18px; }
+    /* Zona segura: 3mm × escala 1.5 = 12px × 1.5 = 18px de margen */
+    .sz-safe { position: absolute; inset: 18px; border: 1.5px dashed rgba(255,200,0,.75); border-radius: 10px; }
+    /* Área del arte: izq=9px, arr=51px, ancho=348px, alto=226px (a escala 1.5) */
+    .sz-art  {
+      position: absolute;
+      left: 9px; top: 51px;
+      width: 348px; height: 226px;
+      border: 1px dashed rgba(0,200,255,.55);
+    }
+    .sz-label {
+      position: absolute; background: rgba(0,0,0,.65); color: #fff;
+      font-size: 9px; padding: 1px 5px; border-radius: 3px; white-space: nowrap;
+      font-family: monospace; pointer-events: none;
+    }
+    @media print { .safe-zone-wrap { display: none !important; } }
+
+    /* Name bar — ~6.5mm a escala 244px/63mm */
+    .card-namebar {
+      height: 25px; border-radius: 4px 4px 0 0;
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 0 7px; flex-shrink: 0;
+    }
+    .frame-modern .card-namebar { background: rgba(0,0,0,.22); }
+    .frame-classic .card-namebar { background: rgba(0,0,0,.28); border-bottom: 1px solid rgba(0,0,0,.3); }
+    .frame-borderless .card-namebar { background: linear-gradient(to bottom, rgba(0,0,0,.82) 0%, rgba(0,0,0,.55) 100%); border-bottom: 1px solid rgba(255,255,255,.12); }
+    .frame-showcase .card-namebar { background: rgba(0,0,0,.45); border: 1px solid rgba(255,255,255,.1); border-radius: 3px; }
+    .card-name-text { font-size: 10.5px; font-weight: 700; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,.8); flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .card-mana-cost { display: flex; align-items: center; gap: 1px; flex-shrink: 0; margin-left: 4px; }
+    .mana-sym { width: 13px; height: 13px; vertical-align: middle; }
+
+    /* Art box — Postmodern M15 frame: 53×39mm → altura 39mm × (244px/63mm) = 151px */
+    .card-art {
+      flex: 0 0 151px; overflow: hidden;
+      border: 1.5px solid rgba(0,0,0,.4);
+      position: relative;
+    }
+    .frame-modern .card-art { border-radius: 2px; }
+    .frame-classic .card-art { border: 2px solid rgba(0,0,0,.5); }
+    .frame-borderless .card-art { flex: 1; border: none; border-radius: 0; }
+    .frame-showcase .card-art { border: 2px solid rgba(255,255,255,.2); border-radius: 2px; }
+    .card-art-img {
+      position: absolute; inset: 0;
+      width: 100%; height: 100%;
+      object-fit: cover;
+      transform-origin: center center;
+    }
+    .card-art-placeholder {
+      width: 100%; height: 100%;
+      display: flex; align-items: center; justify-content: center;
+      background: linear-gradient(135deg,#223 0%,#445 50%,#223 100%);
+      color: rgba(255,255,255,.25); font-size: 32px;
+    }
+
+    /* Type bar — ~4.6mm a escala */
+    .card-typebar {
+      height: 18px; border-radius: 0; flex-shrink: 0;
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 0 7px;
+    }
+    .frame-modern .card-typebar { background: rgba(0,0,0,.2); }
+    .frame-classic .card-typebar { background: rgba(0,0,0,.25); border-top: 1px solid rgba(0,0,0,.25); border-bottom: 1px solid rgba(0,0,0,.25); }
+    .frame-borderless .card-typebar { background: rgba(0,0,0,.5); }
+    .frame-showcase .card-typebar { background: rgba(0,0,0,.4); border: 1px solid rgba(255,255,255,.08); }
+    .card-type-text { font-size: 8.5px; font-weight: 700; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,.8); }
+    .card-rarity-sym { font-size: 11px; color: #d4af37; }
+
+    /* Text box */
+    .card-textbox {
+      flex: 1; border-radius: 3px; padding: 5px 6px; overflow: hidden;
+      display: flex; flex-direction: column; gap: 3px;
+    }
+    .frame-modern .card-textbox { background: rgba(255,252,230,.84); border: 1px solid rgba(0,0,0,.2); }
+    .frame-classic .card-textbox { background: rgba(255,248,215,.9); border: 2px inset rgba(0,0,0,.15); }
+    .frame-borderless .card-textbox { background: rgba(4,4,14,.92); border: 1px solid rgba(255,255,255,.18); border-radius: 4px; }
+    .frame-showcase .card-textbox { background: rgba(0,0,0,.6); border: 1px solid rgba(255,255,255,.12); }
+    .card-rules-text {
+      font-size: 8.5px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; flex: 1;
+    }
+    .frame-modern .card-rules-text, .frame-classic .card-rules-text { color: #111; }
+    .frame-borderless .card-rules-text, .frame-showcase .card-rules-text { color: #e8e8e0; }
+    .card-flavor-text {
+      font-size: 7.5px; font-style: italic; line-height: 1.4;
+      border-top: 1px solid rgba(128,128,128,.3); padding-top: 3px; margin-top: 2px;
+    }
+    .frame-modern .card-flavor-text, .frame-classic .card-flavor-text { color: #444; }
+    .frame-borderless .card-flavor-text, .frame-showcase .card-flavor-text { color: #aaa; }
+
+    /* PT / Loyalty bar */
+    .card-ptbar { height: 20px; display: flex; justify-content: space-between; align-items: center; padding: 0 5px; flex-shrink: 0; }
+    /* Credit strip (artist / collector) */
+    .card-credit-info { font-size: 5.5px; line-height: 1.4; color: rgba(0,0,0,.38); flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+    .frame-borderless .card-credit-info, .frame-showcase .card-credit-info { color: rgba(255,255,255,.35); }
+    /* Symbol insert toolbar */
+    .sym-toolbar { display: flex; gap: 3px; flex-wrap: wrap; background: var(--surface); border: 1px solid var(--border); border-radius: 6px 6px 0 0; border-bottom: none; padding: 5px 7px; }
+    .sym-btn { background: var(--surface2); border: 1px solid var(--border); border-radius: 4px; padding: 2px 5px; font-size: 11px; cursor: pointer; color: var(--text2); transition: all .1s; line-height: 1.4; }
+    .sym-btn:hover { border-color: var(--accent); color: var(--text); }
+    .sym-sep { width: 1px; background: var(--border); align-self: stretch; margin: 0 2px; }
+    /* Rarity selector */
+    .rarity-grid { display: flex; gap: 6px; margin-top: 2px; }
+    .rarity-btn { flex: 1; padding: 5px 4px; border-radius: 6px; border: 1.5px solid var(--border); background: var(--surface2); font-size: 11px; font-weight: 700; cursor: pointer; text-align: center; transition: all .12s; }
+    /* Text size buttons */
+    .textsize-grid { display: flex; gap: 5px; margin-top: 2px; }
+    .textsize-btn { flex: 1; padding: 5px; border-radius: 6px; border: 1.5px solid var(--border); background: var(--surface2); cursor: pointer; font-weight: 600; text-align: center; transition: all .12s; color: var(--text2); }
+    .textsize-btn.active { border-color: var(--accent2); background: rgba(139,92,246,.18); color: #fff; }
+    .card-pt-box {
+      background: rgba(255,248,210,.92); border: 2px solid rgba(0,0,0,.5);
+      border-radius: 4px; padding: 1px 7px;
+      font-size: 11px; font-weight: 700; color: #111; min-width: 34px; text-align: center;
+    }
+    .frame-borderless .card-pt-box, .frame-showcase .card-pt-box { background: rgba(0,0,0,.7); color: #fff; border-color: rgba(255,255,255,.4); }
+    .card-loyalty-box {
+      background: #1a4fcc; border: 2px solid #fff;
+      border-radius: 50%; width: 26px; height: 26px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 13px; font-weight: 700; color: #fff;
+    }
+
+    /* =============================================
+       COLLECTION
+       ============================================= */
+    .collection-layout { display: flex; flex-direction: column; gap: 20px; }
+    .search-bar-row { display: flex; gap: 10px; align-items: center; }
+    .search-input { flex: 1; max-width: 420px; background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; color: var(--text); font-size: 14px; }
+    .search-input:focus { outline: none; border-color: var(--accent2); }
+    .search-results { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; max-height: 300px; overflow-y: auto; margin-top: 8px; }
+    .search-result-item { display: flex; align-items: center; gap: 12px; padding: 10px 14px; cursor: pointer; transition: background .12s; border-bottom: 1px solid var(--border); }
+    .search-result-item:last-child { border-bottom: none; }
+    .search-result-item:hover { background: var(--surface2); }
+    .search-result-img { width: 36px; height: 50px; object-fit: cover; border-radius: 4px; background: var(--surface2); }
+    .search-result-info { flex: 1; }
+    .search-result-name { font-size: 14px; font-weight: 600; }
+    .search-result-type { font-size: 12px; color: var(--text2); }
+    .collection-grid { display: grid; grid-template-columns: repeat(auto-fill,minmax(148px,1fr)); gap: 18px; }
+    .coll-card { display: flex; flex-direction: column; gap: 6px; }
+    .coll-card:hover .coll-img-wrap { transform: translateY(-4px); }
+    .coll-img-wrap { position: relative; border-radius: 9px; overflow: hidden; cursor: pointer; transition: transform .15s; }
+    .coll-img { width: 100%; aspect-ratio: 488/680; object-fit: cover; display: block; border-radius: 9px; box-shadow: 0 4px 18px rgba(0,0,0,.55); }
+    /* Foil shimmer */
+    @keyframes foilMove { 0%{background-position:0% 50%} 50%{background-position:100% 50%} 100%{background-position:0% 50%} }
+    @keyframes foilShine { 0%{background-position:200% 50%} 100%{background-position:-200% 50%} }
+    .foil-layer {
+      position: absolute; inset: 0; pointer-events: none; border-radius: inherit;
+      background: linear-gradient(115deg,
+        transparent 0%, rgba(255,20,147,.28) 12%, rgba(0,200,255,.25) 26%,
+        rgba(255,200,0,.22) 42%, rgba(60,220,80,.22) 58%,
+        rgba(180,0,255,.26) 74%, rgba(255,80,0,.2) 87%, transparent 100%);
+      background-size: 300% 300%;
+      animation: foilMove 4s ease-in-out infinite;
+      mix-blend-mode: color-dodge;
+      opacity: .85;
+    }
+    .foil-shine {
+      position: absolute; inset: 0; pointer-events: none; border-radius: inherit;
+      background: repeating-linear-gradient(
+        -45deg,
+        transparent 0px, transparent 8px,
+        rgba(255,255,255,.04) 8px, rgba(255,255,255,.04) 10px
+      );
+      background-size: 400% 100%;
+      animation: foilShine 6s linear infinite;
+      mix-blend-mode: screen;
+    }
+    /* Badges on card image */
+    .foil-badge { position: absolute; top: 6px; left: 6px; background: linear-gradient(135deg,#c8960c,#fffde0,#c8960c); color: #111; font-size: 8.5px; font-weight: 800; padding: 2px 7px; border-radius: 10px; letter-spacing: .4px; box-shadow: 0 1px 4px rgba(0,0,0,.5); text-transform: uppercase; }
+    .set-badge { position: absolute; bottom: 6px; left: 6px; background: rgba(0,0,0,.78); color: #ccc; font-size: 8.5px; font-weight: 700; padding: 2px 6px; border-radius: 8px; text-transform: uppercase; letter-spacing: .3px; }
+    .price-badge { position: absolute; bottom: 6px; right: 6px; background: rgba(0,0,0,.82); color: #c49a2a; font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 8px; }
+    .price-badge.foil-price { color: #c084ff; }
+    .coll-name { font-size: 12px; font-weight: 600; text-align: center; line-height: 1.3; }
+    .coll-meta { font-size: 11px; color: var(--text2); text-align: center; }
+    .coll-actions { display: flex; gap: 4px; justify-content: center; }
+    .icon-btn { background: var(--surface2); border: 1px solid var(--border); border-radius: 5px; width: 26px; height: 26px; display: flex; align-items: center; justify-content: center; font-size: 13px; transition: all .12s; cursor: pointer; }
+    .icon-btn:hover { border-color: var(--accent); }
+    /* Stats */
+    .stats-bar { display: flex; gap: 20px; flex-wrap: wrap; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 20px; }
+    .stat-item { display: flex; flex-direction: column; gap: 2px; }
+    .stat-value { font-size: 22px; font-weight: 700; color: var(--accent); }
+    .stat-label { font-size: 12px; color: var(--text2); }
+    /* Empty state */
+    .empty-state { text-align: center; padding: 60px 20px; color: var(--text2); }
+    .empty-state .icon { font-size: 48px; margin-bottom: 12px; }
+    .empty-state h3 { font-size: 18px; color: var(--text); margin-bottom: 6px; }
+    /* Modal base */
+    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.82); display: flex; align-items: center; justify-content: center; z-index: 100; padding: 16px; }
+    .modal { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 24px; max-width: 480px; width: 100%; max-height: 90vh; overflow-y: auto; }
+    .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+    /* Printing modal */
+    .printing-modal { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; max-width: 680px; width: 100%; max-height: 88vh; overflow: hidden; display: flex; flex-direction: column; }
+    .pm-header { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; }
+    .pm-header h3 { font-size: 16px; font-weight: 700; }
+    .pm-body { display: flex; flex: 1; overflow: hidden; min-height: 0; }
+    .pm-preview { width: 170px; flex-shrink: 0; padding: 16px 12px; display: flex; flex-direction: column; gap: 10px; border-right: 1px solid var(--border); overflow-y: auto; }
+    .pm-preview-img-wrap { position: relative; border-radius: 10px; overflow: hidden; }
+    .pm-preview-img { width: 100%; border-radius: 10px; display: block; }
+    .pm-preview-info { font-size: 11px; color: var(--text2); line-height: 1.6; }
+    .pm-preview-price { font-size: 14px; font-weight: 700; color: var(--accent); }
+    .pm-preview-price.foil { color: #c084ff; }
+    .pm-list { flex: 1; overflow-y: auto; }
+    .pm-row { display: flex; align-items: center; gap: 10px; padding: 9px 16px; cursor: pointer; border-bottom: 1px solid var(--border); transition: background .1s; }
+    .pm-row:hover { background: var(--surface2); }
+    .pm-row.sel { background: rgba(139,92,246,.15); border-left: 3px solid var(--accent2); padding-left: 13px; }
+    .pm-set-icon { width: 22px; height: 22px; flex-shrink: 0; object-fit: contain; filter: invert(1) opacity(.7); }
+    .pm-row-info { flex: 1; }
+    .pm-row-name { font-size: 12px; font-weight: 600; }
+    .pm-row-sub { font-size: 10px; color: var(--text2); }
+    .pm-row-prices { text-align: right; }
+    .pm-row-price-n { font-size: 11px; color: var(--accent); font-weight: 700; }
+    .pm-row-price-f { font-size: 10px; color: #b084ff; }
+    .pm-footer { padding: 14px 20px; border-top: 1px solid var(--border); display: flex; align-items: center; gap: 12px; flex-shrink: 0; flex-wrap: wrap; }
+    .foil-toggle { display: flex; align-items: center; gap: 8px; cursor: pointer; padding: 8px 14px; border-radius: 8px; border: 2px solid var(--border); background: var(--surface2); transition: all .15s; user-select: none; }
+    .foil-toggle.on { border-color: #b084ff; background: rgba(176,132,255,.15); }
+    .foil-toggle-dot { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--border); background: var(--surface); transition: all .15s; }
+    .foil-toggle.on .foil-toggle-dot { background: #b084ff; border-color: #b084ff; box-shadow: 0 0 6px #b084ff; }
+    /* Toast */
+    .toast { position: fixed; bottom: 24px; right: 24px; background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: 8px; padding: 12px 18px; font-size: 14px; box-shadow: 0 4px 20px rgba(0,0,0,.5); animation: slideIn .2s ease; z-index: 999; }
+    @keyframes slideIn { from { transform: translateX(100px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+    .spinner { display: inline-block; width: 18px; height: 18px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin .6s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Filter / Sort bar ── */
+    .filter-bar {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 12px; padding: 14px 16px;
+      display: flex; flex-direction: column; gap: 10px;
+    }
+    .filter-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .filter-label { font-size: 11px; font-weight: 700; color: var(--text2); text-transform: uppercase; letter-spacing: .5px; min-width: 44px; }
+    .chip {
+      padding: 5px 11px; border-radius: 20px; font-size: 12px; font-weight: 600;
+      border: 1.5px solid var(--border); background: var(--surface2); color: var(--text2);
+      cursor: pointer; transition: all .12s; line-height: 1;
+    }
+    .chip:hover { border-color: var(--accent); color: var(--text); }
+    .chip.active { background: var(--accent2); border-color: var(--accent2); color: #fff; }
+    .chip.foil-chip.active { background: rgba(176,132,255,.25); border-color: #b084ff; color: #c084ff; }
+    /* Color chips */
+    .color-chip { width: 30px; height: 30px; border-radius: 50%; border: 2px solid transparent; font-size: 14px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all .12s; opacity: .45; }
+    .color-chip:hover { opacity: .8; }
+    .color-chip.active { border-color: #fff; opacity: 1; transform: scale(1.12); box-shadow: 0 0 7px rgba(255,255,255,.35); }
+    /* Sort select */
+    .sort-select { background: var(--surface2); border: 1.5px solid var(--border); border-radius: 8px; padding: 6px 10px; color: var(--text); font-size: 12px; cursor: pointer; }
+    .sort-select:focus { outline: none; border-color: var(--accent2); }
+    .filter-clear { font-size: 11px; color: var(--accent2); cursor: pointer; padding: 4px 8px; border-radius: 6px; background: rgba(139,92,246,.12); border: 1px solid rgba(139,92,246,.25); margin-left: auto; }
+    .filter-clear:hover { background: rgba(139,92,246,.22); }
+    .filter-count { font-size: 11px; color: var(--text2); margin-left: auto; }
+    /* ── Folders ── */
+    .folders-bar { display: flex; gap: 8px; align-items: stretch; overflow-x: auto; padding-bottom: 4px; flex-wrap: nowrap; }
+    .folders-bar::-webkit-scrollbar { height: 4px; } .folders-bar::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+    .folder-tab { display: flex; align-items: center; gap: 8px; padding: 9px 12px; border-radius: 10px; border: 1.5px solid var(--border); background: var(--surface); cursor: pointer; transition: all .15s; white-space: nowrap; flex-shrink: 0; position: relative; min-width: 140px; max-width: 200px; }
+    .folder-tab:hover { border-color: var(--accent); }
+    .folder-tab.active { border-color: var(--accent2); background: rgba(139,92,246,.12); }
+    .folder-tab-icon { font-size: 16px; flex-shrink: 0; }
+    .folder-tab-info { flex: 1; min-width: 0; }
+    .folder-tab-name { font-size: 13px; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .folder-tab-count { font-size: 10px; color: var(--text2); margin-top: 1px; }
+    .folder-tab-actions { display: flex; gap: 2px; opacity: 0; transition: opacity .12s; flex-shrink: 0; }
+    .folder-tab:hover .folder-tab-actions, .folder-tab.active .folder-tab-actions { opacity: 1; }
+    .folder-action-btn { background: transparent; border: none; border-radius: 4px; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; font-size: 11px; cursor: pointer; transition: background .1s; padding: 0; line-height: 1; }
+    .folder-action-btn:hover { background: var(--surface2); }
+    .folder-action-btn.danger:hover { background: rgba(224,85,85,.15); }
+    .new-folder-btn { display: flex; align-items: center; gap: 6px; padding: 9px 14px; border-radius: 10px; border: 1.5px dashed var(--border); background: transparent; color: var(--text2); cursor: pointer; transition: all .15s; white-space: nowrap; flex-shrink: 0; font-size: 13px; font-weight: 600; }
+    .new-folder-btn:hover { border-color: var(--accent); color: var(--accent); }
+    .folder-modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.82); display: flex; align-items: center; justify-content: center; z-index: 200; padding: 16px; }
+    .folder-modal { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 24px; width: 100%; max-width: 380px; }
+    .folder-modal h3 { font-size: 16px; font-weight: 700; margin-bottom: 14px; }
+    .folder-modal input { width: 100%; background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px; color: var(--text); font-size: 14px; margin-bottom: 14px; display: block; }
+    .folder-modal input:focus { outline: none; border-color: var(--accent2); }
+    .folder-modal-actions { display: flex; gap: 8px; justify-content: flex-end; }
+    /* Editor card scale wrapper — carta 244×341px escalada 1.5× = 366×512px */
+    .editor-card-outer { width: 366px; height: 512px; flex-shrink: 0; position: relative; }
+    .editor-card-scale { transform: scale(1.5); transform-origin: top left; width: 244px; height: 341px; position: absolute; top: 0; left: 0; }
+
+    @media print {
+      @page { size: A4; margin: 8mm; }
+      body { background: white; }
+      .header, .nav, .form-panel, .preview-label, .print-hint, .btn-row, .section-title, .section-sub { display: none !important; }
+      .editor-layout { grid-template-columns: 1fr; }
+      /* Grilla 3×3 — 9 cartas por hoja A4 */
+      .preview-panel { display: grid !important; grid-template-columns: repeat(3, 63mm); gap: 3mm; justify-content: center; align-items: start; }
+      /* Reset scale wrapper */
+      .editor-card-outer { width: 63mm !important; height: 88mm !important; position: static !important; }
+      .editor-card-scale { transform: none !important; position: static !important; width: 63mm !important; height: 88mm !important; }
+      /* Carta: 63×88mm oficiales, radio de esquina 3mm */
+      .mtg-card {
+        break-inside: avoid; box-shadow: none;
+        width: 63mm !important; height: 88mm !important; border-radius: 3mm !important;
+        /* Forzar impresión de fondos y gradientes del marco */
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+        color-adjust: exact !important;
+      }
+      /* Forzar impresión de colores en toda la carta */
+      .mtg-card * {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+      }
+      /* Áreas transparentes al imprimir (el marco provee el diseño) */
+      .card-textbox { background: transparent !important; border-color: transparent !important; }
+      .card-namebar { background: transparent !important; }
+      .card-typebar { background: transparent !important; }
+    }
+  </style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel">
+const { useState, useEffect, useCallback, useRef } = React;
+
+/* ─── MANA SYMBOL via Scryfall SVG ─── */
+const SCRYFALL_SYM = 'https://svgs.scryfall.io/card-symbols/';
+// Cache módulo-nivel: sym → dataURL (persiste entre renders)
+const SYM_DATA_CACHE = {};
+function fetchSymDataUrl(sym) {
+  const url = `${SCRYFALL_SYM}${sym}.svg`;
+  if (SYM_DATA_CACHE[sym]) return Promise.resolve(SYM_DATA_CACHE[sym]);
+  return fetch(url, { mode: 'cors' })
+    .then(r => { if (!r.ok) throw r.status; return r.blob(); })
+    .then(blob => new Promise((res, rej) => {
+      const reader = new FileReader();
+      reader.onload = () => { SYM_DATA_CACHE[sym] = reader.result; res(reader.result); };
+      reader.onerror = rej;
+      reader.readAsDataURL(blob);
+    }))
+    .catch(() => { SYM_DATA_CACHE[sym] = url; return url; });
+}
+const SYM_MAP = {
+  'W':'W','U':'U','B':'B','R':'R','G':'G','C':'C',
+  'X':'X','Y':'Y','Z':'Z','S':'S','E':'E','P':'P',
+  '0':'0','1':'1','2':'2','3':'3','4':'4','5':'5',
+  '6':'6','7':'7','8':'8','9':'9','10':'10','11':'11',
+  '12':'12','13':'13','14':'14','15':'15','16':'16',
+  'W/U':'WU','W/B':'WB','U/B':'UB','U/R':'UR','B/R':'BR',
+  'B/G':'BG','R/G':'RG','R/W':'RW','G/W':'GW','G/U':'GU',
+  '2/W':'2W','2/U':'2U','2/B':'2B','2/R':'2R','2/G':'2G',
+  'W/P':'WP','U/P':'UP','B/P':'BP','R/P':'RP','G/P':'GP',
+  'HW':'HW','HR':'HR','T':'T','Q':'Q',
+};
+
+function parseMana(cost) {
+  if (!cost) return [];
+  return (cost.match(/\{[^}]+\}/g) || []).map(tok => {
+    const k = tok.slice(1, -1).toUpperCase();
+    return SYM_MAP[k] || SYM_MAP[k.replace('/','/')] || k;
+  });
+}
+
+/* Componente que auto-carga su símbolo como data URL para que el PNG/clone lo capture */
+function ManaSymImg({ sym, size, style, onErr }) {
+  const url = `${SCRYFALL_SYM}${sym}.svg`;
+  const [src, setSrc] = React.useState(SYM_DATA_CACHE[sym] || url);
+  React.useEffect(() => {
+    if (SYM_DATA_CACHE[sym] && SYM_DATA_CACHE[sym] !== url) { setSrc(SYM_DATA_CACHE[sym]); return; }
+    fetchSymDataUrl(sym).then(dataUrl => setSrc(dataUrl));
+  }, [sym]);
+  return (
+    <img src={src} width={size} height={size} alt={sym}
+      style={style}
+      onError={onErr || (e => { e.target.style.display='none'; })}
+    />
+  );
+}
+
+function ManaCost({ cost, size = 14 }) {
+  const syms = parseMana(cost);
+  if (!syms.length) return null;
+  return (
+    <span style={{ display:'flex', alignItems:'center', gap:'1px', flexShrink:0 }}>
+      {syms.map((s, i) => (
+        <ManaSymImg key={i} sym={s} size={size}
+          style={{ verticalAlign:'middle', filter:'drop-shadow(0 0 1px rgba(0,0,0,.6))' }}
+        />
+      ))}
+    </span>
+  );
+}
+
+/* ─── COLLECTION HELPERS ─── */
+function cardColors(c) {
+  if (c.colors && c.colors.length > 0) return c.colors;
+  const m = c.manaCost || '';
+  return ['W','U','B','R','G'].filter(x => m.includes(`{${x}}`));
+}
+function cardMainType(typeLine) {
+  const t = (typeLine || '').toLowerCase();
+  if (t.includes('creature'))     return 'creature';
+  if (t.includes('planeswalker')) return 'planeswalker';
+  if (t.includes('instant'))      return 'instant';
+  if (t.includes('sorcery'))      return 'sorcery';
+  if (t.includes('enchantment'))  return 'enchantment';
+  if (t.includes('artifact'))     return 'artifact';
+  if (t.includes('land'))         return 'land';
+  return 'other';
+}
+function cardPrice(c) {
+  return c.isFoil ? parseFloat(c.priceFoilEur||0) : parseFloat(c.priceEur||0);
+}
+
+const TYPE_OPTIONS = [
+  { id:'creature',     label:'Criatura' },
+  { id:'instant',      label:'Instantáneo' },
+  { id:'sorcery',      label:'Conjuro' },
+  { id:'enchantment',  label:'Encantamiento' },
+  { id:'artifact',     label:'Artefacto' },
+  { id:'land',         label:'Tierra' },
+  { id:'planeswalker', label:'Planeswalker' },
+];
+const COLOR_OPTIONS = [
+  { id:'W', emoji:'☀️', bg:'#c8b840', label:'Blanco' },
+  { id:'U', emoji:'💧', bg:'#2060a0', label:'Azul' },
+  { id:'B', emoji:'💀', bg:'#404058', label:'Negro' },
+  { id:'R', emoji:'🔥', bg:'#c03820', label:'Rojo' },
+  { id:'G', emoji:'🌿', bg:'#207030', label:'Verde' },
+  { id:'M', emoji:'✦',  bg:'#a07010', label:'Multicolor' },
+  { id:'C', emoji:'◇',  bg:'#707080', label:'Incoloro' },
+];
+const RARITY_OPTIONS = [
+  { id:'common',   label:'Común',       sym:'○', color:'#aaaaaa' },
+  { id:'uncommon', label:'Infrecuente',  sym:'◆', color:'#80b8c8' },
+  { id:'rare',     label:'Rara',         sym:'★', color:'#c8a820' },
+  { id:'mythic',   label:'Mítica',       sym:'✦', color:'#e06020' },
+];
+
+const SORT_OPTIONS = [
+  { id:'name-asc',    label:'Nombre A→Z' },
+  { id:'name-desc',   label:'Nombre Z→A' },
+  { id:'value-desc',  label:'Valor ↓' },
+  { id:'value-asc',   label:'Valor ↑' },
+  { id:'count-desc',  label:'Copias ↓' },
+  { id:'set-asc',     label:'Edición A→Z' },
+  { id:'added-desc',  label:'Más reciente' },
+];
+
+/* ─── FOIL CARD IMAGE ─── */
+function FoilCardImage({ src, alt, isFoil, className, onClick, onError }) {
+  return (
+    <div className="coll-img-wrap" onClick={onClick} style={{borderRadius:'9px'}}>
+      <img className={className || 'coll-img'} src={src} alt={alt} onError={onError} />
+      {isFoil && <><div className="foil-layer" /><div className="foil-shine" /></>}
+    </div>
+  );
+}
+
+/* ─── PRINTING SELECTOR MODAL ─── */
+function PrintingModal({ cardName, onClose, onAdd }) {
+  const [printings, setPrintings] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [selected, setSelected] = useState(null);
+  const [isFoil, setIsFoil] = useState(false);
+  const [initialCount, setInitialCount] = useState(1);
+  const [editionFilter, setEditionFilter] = useState('');
+
+  useEffect(() => {
+    async function fetchPrintings() {
+      setLoading(true);
+      try {
+        // Paso 1: obtener oracle_id por nombre exacto (maneja comillas y chars especiales)
+        const namedUrl = `https://api.scryfall.com/cards/named?exact=${encodeURIComponent(cardName)}`;
+        const namedR = await fetch(namedUrl);
+        const namedD = await namedR.json();
+
+        let searchUrl;
+        if (namedD.oracle_id) {
+          // Paso 2: buscar todas las ediciones por oracle_id (no depende de la sintaxis de quotes)
+          searchUrl = `https://api.scryfall.com/cards/search?q=oracleid%3A${namedD.oracle_id}&unique=prints&order=released`;
+        } else {
+          // Fallback: búsqueda directa por nombre
+          searchUrl = `https://api.scryfall.com/cards/search?q=!"${encodeURIComponent(cardName)}"&unique=prints&order=released`;
+        }
+
+        const r = await fetch(searchUrl);
+        const d = await r.json();
+        const list = (d.data || []).reverse(); // newest first
+        setPrintings(list);
+        if (list.length) setSelected(list[0]);
+      } catch { setPrintings([]); } finally { setLoading(false); }
+    }
+    fetchPrintings();
+  }, [cardName]);
+
+  const img = selected?.image_uris?.normal || selected?.card_faces?.[0]?.image_uris?.normal || '';
+  const priceN = selected?.prices?.eur ? `€${parseFloat(selected.prices.eur).toFixed(2)}` : '—';
+  const priceF = selected?.prices?.eur_foil ? `€${parseFloat(selected.prices.eur_foil).toFixed(2)}` : '—';
+  const activePrice = isFoil ? priceF : priceN;
+  const hasFoil = !!selected?.prices?.eur_foil;
+
+  const handleAdd = () => {
+    if (!selected) return;
+    const imgN = selected.image_uris?.normal || selected.card_faces?.[0]?.image_uris?.normal || '';
+    const imgS = selected.image_uris?.small || selected.card_faces?.[0]?.image_uris?.small || '';
+    onAdd({
+      uid: `${selected.id}_${isFoil}`,
+      scryfallId: selected.id,
+      name: selected.name,
+      img: imgN,
+      imgS,
+      typeLine: selected.type_line,
+      manaCost: selected.mana_cost,
+      colors: selected.colors || [],
+      setName: selected.set_name,
+      setCode: selected.set.toUpperCase(),
+      collectorNumber: selected.collector_number,
+      releasedAt: selected.released_at,
+      isFoil,
+      priceEur: selected.prices?.eur || null,
+      priceFoilEur: selected.prices?.eur_foil || null,
+      rarity: selected.rarity || '',
+      count: Math.max(1, initialCount),
+    });
+    onClose();
+  };
+
+  const fallbackImg = "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='146' height='204'><rect width='146' height='204' rx='8' fill='%23333'/><text x='73' y='102' text-anchor='middle' fill='%23666' font-size='11'>Sin imagen</text></svg>";
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="printing-modal" onClick={e => e.stopPropagation()}>
+        {/* Header */}
+        <div className="pm-header">
+          <h3>📋 Seleccionar edición — {cardName}</h3>
+          <button className="icon-btn" onClick={onClose}>✕</button>
+        </div>
+
+        {/* Body */}
+        <div className="pm-body">
+          {/* Left: preview */}
+          <div className="pm-preview">
+            {selected ? (
+              <>
+                <div className="pm-preview-img-wrap">
+                  <img className="pm-preview-img" src={img} alt={selected.name} onError={e=>{e.target.src=fallbackImg;}} />
+                  {isFoil && <><div className="foil-layer" /><div className="foil-shine" /></>}
+                </div>
+                <div className="pm-preview-info">
+                  <div style={{fontWeight:700,fontSize:'12px',marginBottom:'4px'}}>{selected.set_name}</div>
+                  <div>{selected.set.toUpperCase()} #{selected.collector_number}</div>
+                  <div>{selected.released_at?.slice(0,4)}</div>
+                  <div style={{marginTop:'6px',fontSize:'10px',color:'var(--text2)'}}>Rareza: {selected.rarity}</div>
+                  {selected.lang && <div style={{fontSize:'10px',color:'var(--text2)'}}>Idioma: {selected.lang.toUpperCase()}</div>}
+                </div>
+                <div>
+                  <div style={{fontSize:'11px',color:'var(--text2)',marginBottom:'3px'}}>Precio Cardmarket</div>
+                  <div className={`pm-preview-price${isFoil?' foil':''}`}>{activePrice}</div>
+                  {!isFoil && hasFoil && <div style={{fontSize:'10px',color:'#b084ff',marginTop:'2px'}}>Foil: {priceF}</div>}
+                  {activePrice === '—' && (
+                    <div style={{fontSize:'10px',color:'var(--text2)',marginTop:'6px',lineHeight:1.4}}>Sin precio en Scryfall</div>
+                  )}
+                </div>
+              </>
+            ) : loading ? (
+              <div style={{display:'flex',justifyContent:'center',paddingTop:'20px'}}><div className="spinner"/></div>
+            ) : (
+              <div style={{color:'var(--text2)',fontSize:'13px',padding:'8px'}}>Sin impresiones</div>
+            )}
+          </div>
+
+          {/* Right: printings list */}
+          <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
+            {!loading && printings.length > 0 && (
+              <div style={{padding:'8px 12px',borderBottom:'1px solid var(--border)',flexShrink:0}}>
+                <input
+                  value={editionFilter}
+                  onChange={e => setEditionFilter(e.target.value)}
+                  placeholder="🔍 Filtrar edición…"
+                  style={{
+                    width:'100%', padding:'6px 10px', borderRadius:'6px', fontSize:'12px',
+                    background:'var(--surface2)', border:'1px solid var(--border)', color:'var(--text)',
+                  }}
+                />
+              </div>
+            )}
+          <div className="pm-list">
+            {loading && (
+              <div style={{display:'flex',justifyContent:'center',padding:'32px'}}>
+                <div className="spinner" />
+              </div>
+            )}
+            {!loading && printings.filter(p =>
+              !editionFilter.trim() ||
+              p.set_name.toLowerCase().includes(editionFilter.trim().toLowerCase()) ||
+              p.set.toLowerCase().includes(editionFilter.trim().toLowerCase())
+            ).map(p => {
+              const pN = p.prices?.eur ? `€${parseFloat(p.prices.eur).toFixed(2)}` : '—';
+              const pF = p.prices?.eur_foil ? `€${parseFloat(p.prices.eur_foil).toFixed(2)}` : null;
+              return (
+                <div key={p.id} className={`pm-row${selected?.id===p.id?' sel':''}`} onClick={()=>setSelected(p)}>
+                  <img className="pm-set-icon"
+                    src={`https://svgs.scryfall.io/sets/${p.set}.svg`}
+                    alt={p.set}
+                    onError={e=>{e.target.style.display='none';}}
+                  />
+                  <div className="pm-row-info">
+                    <div className="pm-row-name">{p.set_name}</div>
+                    <div className="pm-row-sub">{p.set.toUpperCase()} #{p.collector_number} · {p.released_at?.slice(0,4)} · {p.lang?.toUpperCase()}</div>
+                  </div>
+                  <div className="pm-row-prices">
+                    <div className="pm-row-price-n">{pN}</div>
+                    {pF && <div className="pm-row-price-f">✨ {pF}</div>}
+                  </div>
+                </div>
+              );
+            })}
+            {!loading && !printings.length && (
+              <div style={{padding:'24px',color:'var(--text2)',fontSize:'13px',textAlign:'center'}}>No se encontraron ediciones</div>
+            )}
+            {!loading && printings.length > 0 && editionFilter.trim() &&
+              !printings.some(p =>
+                p.set_name.toLowerCase().includes(editionFilter.trim().toLowerCase()) ||
+                p.set.toLowerCase().includes(editionFilter.trim().toLowerCase())
+              ) && (
+              <div style={{padding:'24px',color:'var(--text2)',fontSize:'13px',textAlign:'center'}}>Sin resultados para "{editionFilter}"</div>
+            )}
+          </div>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="pm-footer">
+          <a
+            href={`https://www.cardmarket.com/es/Magic/Products/Search?searchString=${encodeURIComponent(selected?.name||cardName)}`}
+            target="_blank" rel="noopener noreferrer"
+            style={{
+              display:'inline-flex',alignItems:'center',gap:'5px',
+              padding:'8px 12px',borderRadius:'7px',fontSize:'12px',fontWeight:700,
+              background:'#1a6e3c',color:'#fff',textDecoration:'none',
+              border:'1px solid #2a9e5c',flexShrink:0,
+            }}
+          >
+            🔗 Cardmarket
+          </a>
+          <div className={`foil-toggle${isFoil?' on':''}`} onClick={()=>setIsFoil(f=>!f)}>
+            <div className="foil-toggle-dot" />
+            <span className="foil-toggle-label" style={{color: isFoil ? '#c084ff' : 'var(--text2)', fontSize:'13px'}}>
+              ✨ Foil {isFoil ? 'activado' : 'desactivado'}
+            </span>
+          </div>
+          {isFoil && !hasFoil && selected && (
+            <span style={{fontSize:'11px',color:'var(--text2)'}}>Sin precio foil disponible</span>
+          )}
+          <div style={{display:'flex',alignItems:'center',gap:'6px'}}>
+            <span style={{fontSize:'12px',color:'var(--text2)',fontWeight:600}}>Cantidad:</span>
+            <input
+              type="number" min="1" max="99"
+              value={initialCount}
+              onChange={e => setInitialCount(Math.max(1, parseInt(e.target.value)||1))}
+              style={{
+                width:'56px', padding:'5px 8px', borderRadius:'6px', fontSize:'14px', fontWeight:700,
+                background:'var(--surface2)', border:'1px solid var(--border)', color:'var(--text)',
+                textAlign:'center',
+              }}
+            />
+          </div>
+          <div style={{marginLeft:'auto',display:'flex',gap:'8px'}}>
+            <button className="btn btn-secondary" onClick={onClose}>Cancelar</button>
+            <button className="btn btn-primary" onClick={handleAdd} disabled={!selected}>
+              Añadir {initialCount > 1 ? `×${initialCount} ` : ''}a colección
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── DETAIL MODAL ─── */
+function DetailModal({ card, onClose, onChangeCount, onUpdatePrice }) {
+  const [editingPrice, setEditingPrice] = useState(false);
+  const [editN, setEditN] = useState(card.priceEur ? parseFloat(card.priceEur).toFixed(2) : '');
+  const [editF, setEditF] = useState(card.priceFoilEur ? parseFloat(card.priceFoilEur).toFixed(2) : '');
+
+  const savePrice = () => {
+    onUpdatePrice(editN !== '' ? editN : null, editF !== '' ? editF : null);
+    setEditingPrice(false);
+  };
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" onClick={e=>e.stopPropagation()} style={{maxWidth:'380px'}}>
+        <div className="modal-header">
+          <h3>{card.name} {card.isFoil&&'✨'}</h3>
+          <button className="icon-btn" onClick={onClose}>✕</button>
+        </div>
+        <div style={{position:'relative',borderRadius:'12px',overflow:'hidden',marginBottom:'14px'}}>
+          <img src={card.img} alt={card.name} style={{width:'100%',borderRadius:'12px',display:'block'}}
+            onError={e=>{e.target.style.display='none';}} />
+          {card.isFoil&&<><div className="foil-layer"/><div className="foil-shine"/></>}
+        </div>
+        <div style={{display:'flex',flexDirection:'column',gap:'6px',fontSize:'13px',color:'var(--text2)'}}>
+          <div><b style={{color:'var(--text)'}}>Edición:</b> {card.setName}</div>
+          <div><b style={{color:'var(--text)'}}>Código:</b> {card.setCode} #{card.collectorNumber}</div>
+          <div><b style={{color:'var(--text)'}}>Año:</b> {card.releasedAt?.slice(0,4)}</div>
+          {!editingPrice ? (
+            <div style={{display:'flex',gap:'16px',marginTop:'4px',alignItems:'center',flexWrap:'wrap'}}>
+              <div><b style={{color:'var(--text)'}}>Normal:</b> <span style={{color:'var(--accent)'}}>{card.priceEur?`€${parseFloat(card.priceEur).toFixed(2)}`:'—'}</span></div>
+              <div><b style={{color:'var(--text)'}}>Foil:</b> <span style={{color:'#c084ff'}}>{card.priceFoilEur?`€${parseFloat(card.priceFoilEur).toFixed(2)}`:'—'}</span></div>
+              <button onClick={()=>setEditingPrice(true)}
+                style={{fontSize:'11px',padding:'3px 9px',borderRadius:'5px',border:'1px solid var(--border)',background:'var(--surface2)',color:'var(--text2)',cursor:'pointer',marginLeft:'auto'}}>
+                ✏️ Editar precio
+              </button>
+            </div>
+          ) : (
+            <div style={{marginTop:'4px',padding:'10px 12px',background:'var(--surface2)',borderRadius:'8px',border:'1px solid var(--border)',display:'flex',flexDirection:'column',gap:'8px'}}>
+              <span style={{fontSize:'11px',color:'var(--text2)',fontWeight:700,textTransform:'uppercase',letterSpacing:'.4px'}}>Precio manual (€)</span>
+              <div style={{display:'flex',gap:'8px'}}>
+                <div style={{flex:1}}>
+                  <div style={{fontSize:'10px',color:'var(--text2)',marginBottom:'3px'}}>Normal</div>
+                  <input type="number" min="0" step="0.01" placeholder="0.00"
+                    value={editN} onChange={e=>setEditN(e.target.value)}
+                    style={{width:'100%',padding:'5px 8px',borderRadius:'5px',border:'1px solid var(--border)',background:'var(--bg)',color:'var(--text)',fontSize:'13px'}} />
+                </div>
+                <div style={{flex:1}}>
+                  <div style={{fontSize:'10px',color:'#c084ff',marginBottom:'3px'}}>Foil</div>
+                  <input type="number" min="0" step="0.01" placeholder="0.00"
+                    value={editF} onChange={e=>setEditF(e.target.value)}
+                    style={{width:'100%',padding:'5px 8px',borderRadius:'5px',border:'1px solid var(--border)',background:'var(--bg)',color:'var(--text)',fontSize:'13px'}} />
+                </div>
+              </div>
+              <div style={{display:'flex',gap:'6px'}}>
+                <button className="btn btn-secondary" style={{flex:1,fontSize:'12px',padding:'6px'}} onClick={()=>setEditingPrice(false)}>Cancelar</button>
+                <button className="btn btn-primary" style={{flex:1,fontSize:'12px',padding:'6px'}} onClick={savePrice}>💾 Guardar</button>
+              </div>
+            </div>
+          )}
+        </div>
+        <div style={{display:'flex',gap:'8px',marginTop:'14px',flexWrap:'wrap'}}>
+          <a
+            href={`https://www.cardmarket.com/es/Magic/Products/Search?searchString=${encodeURIComponent(card.name)}`}
+            target="_blank" rel="noopener noreferrer"
+            style={{
+              display:'inline-flex',alignItems:'center',gap:'5px',
+              padding:'8px 12px',borderRadius:'7px',fontSize:'12px',fontWeight:700,
+              background:'#1a6e3c',color:'#fff',textDecoration:'none',
+              border:'1px solid #2a9e5c',
+            }}
+          >
+            🔗 Cardmarket
+          </a>
+          <button className="btn btn-secondary" style={{flex:1}} onClick={()=>onChangeCount(-1)}>− Quitar copia</button>
+          <button className="btn btn-primary" style={{flex:1}} onClick={()=>onChangeCount(+1)}>+ Agregar copia</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── FOLDER VIEW (inner collection display) ─── */
+function FolderView({ collection, setCollection, showToast }) {
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [printingTarget, setPrintingTarget] = useState(null);
+  const [eurClpRate, setEurClpRate] = useState(null);
+
+  useEffect(() => {
+    fetch('https://api.frankfurter.app/latest?from=EUR&to=CLP')
+      .then(r => r.json())
+      .then(d => { if (d?.rates?.CLP) setEurClpRate(d.rates.CLP); })
+      .catch(() => setEurClpRate(1150)); // fallback aproximado
+  }, []);
+  const [detailCard, setDetailCard] = useState(null);
+  const [fColors, setFColors] = useState([]);
+  const [fTypes, setFTypes] = useState([]);
+  const [fFoil, setFFoil] = useState('all');
+  const [fRarity, setFRarity] = useState([]);
+  const [collSearch, setCollSearch] = useState('');
+  const [sortBy, setSortBy] = useState('name-asc');
+  const timer = useRef();
+
+  const search = useCallback(async q => {
+    if (!q || q.length < 2) { setResults([]); return; }
+    setLoading(true);
+    try {
+      const r = await fetch(`https://api.scryfall.com/cards/search?q=${encodeURIComponent(q)}&order=name&unique=cards`);
+      const d = await r.json();
+      setResults((d.data || []).slice(0, 12));
+    } catch { setResults([]); } finally { setLoading(false); }
+  }, []);
+
+  const handleQuery = e => {
+    setQuery(e.target.value);
+    clearTimeout(timer.current);
+    timer.current = setTimeout(() => search(e.target.value), 400);
+  };
+
+  const handleSearchClick = sc => { setPrintingTarget(sc.name); setQuery(''); setResults([]); };
+
+  const addFromModal = entry => {
+    const ex = collection.find(c => c.uid === entry.uid);
+    if (ex) {
+      const newCount = ex.count + entry.count;
+      setCollection(collection.map(c => c.uid === entry.uid ? {...c, count: newCount} : c));
+      showToast(`+${entry.count} ${entry.name} ${entry.isFoil ? '✨' : ''} (${newCount} total)`);
+    } else {
+      setCollection([...collection, entry]);
+      showToast(`✅ ${entry.name}${entry.isFoil ? ' ✨ Foil' : ''}${entry.count > 1 ? ` ×${entry.count}` : ''} — ${entry.setName} añadida`);
+    }
+  };
+
+  const changeCount = (uid, d) => setCollection(collection.map(c => {
+    if (c.uid !== uid) return c;
+    return c.count + d <= 0 ? null : {...c, count: c.count+d};
+  }).filter(Boolean));
+
+  const updatePrice = (uid, priceEur, priceFoilEur) => {
+    setCollection(collection.map(c => c.uid !== uid ? c : {
+      ...c,
+      priceEur:     priceEur     !== '' ? priceEur     : c.priceEur,
+      priceFoilEur: priceFoilEur !== '' ? priceFoilEur : c.priceFoilEur,
+    }));
+  };
+
+  const remove = uid => { setCollection(collection.filter(c => c.uid !== uid)); showToast('Carta eliminada'); };
+
+  const exportCSV = () => {
+    const headers = ['Nombre','Edición','Set','Número','Año','Foil','Precio Normal (€)','Precio Foil (€)','Copias','Valor (€)'];
+    const rows = collection.map(c => [
+      c.name, c.setName||'', c.setCode||'', c.collectorNumber||'',
+      c.releasedAt?.slice(0,4)||'', c.isFoil?'Sí':'No',
+      c.priceEur?parseFloat(c.priceEur).toFixed(2):'',
+      c.priceFoilEur?parseFloat(c.priceFoilEur).toFixed(2):'',
+      c.count, (cardPrice(c)*c.count).toFixed(2),
+    ]);
+    const csv = [headers,...rows].map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
+    const blob = new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `mtg-coleccion-${new Date().toISOString().slice(0,10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+    showToast(`📊 CSV exportado (${collection.length} cartas)`);
+  };
+
+  /* ── Filter & sort ── */
+  const toggleColor  = id => setFColors(prev =>  prev.includes(id) ? prev.filter(x=>x!==id) : [...prev,id]);
+  const toggleType   = id => setFTypes(prev =>   prev.includes(id) ? prev.filter(x=>x!==id) : [...prev,id]);
+  const toggleRarity = id => setFRarity(prev =>  prev.includes(id) ? prev.filter(x=>x!==id) : [...prev,id]);
+  const clearAll = () => { setFColors([]); setFTypes([]); setFFoil('all'); setFRarity([]); setCollSearch(''); setSortBy('name-asc'); };
+  const hasFilters = fColors.length > 0 || fTypes.length > 0 || fFoil !== 'all' || fRarity.length > 0 || collSearch.trim() !== '';
+
+  const displayed = collection
+    .filter(c => {
+      // name search within collection
+      if (collSearch.trim()) {
+        if (!c.name.toLowerCase().includes(collSearch.trim().toLowerCase())) return false;
+      }
+      // foil filter
+      if (fFoil === 'foil'   && !c.isFoil) return false;
+      if (fFoil === 'normal' &&  c.isFoil) return false;
+      // color filter
+      if (fColors.length > 0) {
+        const cols = cardColors(c);
+        const isMulti = cols.length > 1;
+        const isColorless = cols.length === 0;
+        const matches = fColors.some(fc => {
+          if (fc === 'M') return isMulti;
+          if (fc === 'C') return isColorless;
+          return cols.includes(fc);
+        });
+        if (!matches) return false;
+      }
+      // type filter
+      if (fTypes.length > 0) {
+        if (!fTypes.includes(cardMainType(c.typeLine))) return false;
+      }
+      // rarity filter
+      if (fRarity.length > 0) {
+        if (!fRarity.includes(c.rarity)) return false;
+      }
+      return true;
+    })
+    .sort((a, b) => {
+      if (sortBy === 'name-asc')   return a.name.localeCompare(b.name);
+      if (sortBy === 'name-desc')  return b.name.localeCompare(a.name);
+      if (sortBy === 'value-desc') return cardPrice(b) - cardPrice(a);
+      if (sortBy === 'value-asc')  return cardPrice(a) - cardPrice(b);
+      if (sortBy === 'count-desc') return b.count - a.count;
+      if (sortBy === 'set-asc')    return (a.setName||'').localeCompare(b.setName||'');
+      if (sortBy === 'added-desc') return collection.indexOf(b) - collection.indexOf(a);
+      return 0;
+    });
+
+  const totalCopies = collection.reduce((a,c) => a+c.count, 0);
+  const totalValue  = collection.reduce((a,c) => a + cardPrice(c) * c.count, 0);
+  const fallbackImg = () => `data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='140' height='196'><rect width='140' height='196' rx='8' fill='%23333'/><text x='70' y='98' text-anchor='middle' fill='%23888' font-size='11'>Sin imagen</text></svg>`;
+
+  return (
+    <div>
+      {/* Stats */}
+      <div className="stats-bar">
+        <div className="stat-item"><span className="stat-value">{collection.length}</span><span className="stat-label">Entradas</span></div>
+        <div className="stat-item"><span className="stat-value">{totalCopies}</span><span className="stat-label">Copias totales</span></div>
+        <div className="stat-item">
+          <span className="stat-value">€{totalValue.toFixed(2)}</span>
+          {eurClpRate && <span className="stat-value" style={{fontSize:'13px',color:'var(--text2)',marginLeft:'6px'}}>/ ${Math.round(totalValue * eurClpRate).toLocaleString('es-CL')} CLP</span>}
+          <span className="stat-label">Valor total</span>
+        </div>
+        {collection.length > 0 && (
+          <div style={{marginLeft:'auto'}}>
+            <button className="btn btn-secondary" style={{fontSize:'12px',padding:'6px 12px'}} onClick={exportCSV}>📊 CSV</button>
+          </div>
+        )}
+      </div>
+
+      {/* Search */}
+      <div>
+        <div className="search-bar-row">
+          <input className="search-input" value={query} onChange={handleQuery} placeholder="🔍 Buscar carta para añadir…" />
+          {loading && <div className="spinner" />}
+        </div>
+        {results.length > 0 && (
+          <div className="search-results">
+            {results.map(c => (
+              <div key={c.id} className="search-result-item" onClick={() => handleSearchClick(c)}>
+                <img className="search-result-img"
+                  src={c.image_uris?.small || c.card_faces?.[0]?.image_uris?.small || ''}
+                  alt={c.name} onError={e=>{e.target.style.display='none';}} />
+                <div className="search-result-info">
+                  <div className="search-result-name">{c.name}</div>
+                  <div className="search-result-type">{c.type_line}</div>
+                </div>
+                <ManaCost cost={c.mana_cost} size={12} />
+                <span style={{color:'var(--accent2)',fontSize:'18px',marginLeft:'8px'}}>→</span>
+              </div>
+            ))}
+          </div>
+        )}
+        {query.length >= 2 && !loading && !results.length && (
+          <div style={{marginTop:'8px',color:'var(--text2)',fontSize:'13px'}}>Sin resultados para "{query}"</div>
+        )}
+      </div>
+
+      {/* ── Filter / Sort bar (only when collection has cards) ── */}
+      {collection.length > 0 && (
+        <div className="filter-bar">
+          {/* Row 0: Search within collection */}
+          <div className="filter-row">
+            <span className="filter-label">Buscar</span>
+            <input
+              className="search-input"
+              style={{maxWidth:'280px',padding:'6px 12px',fontSize:'13px'}}
+              value={collSearch}
+              onChange={e => setCollSearch(e.target.value)}
+              placeholder="🔍 Filtrar por nombre…"
+            />
+            {hasFilters && (
+              <button className="filter-clear" onClick={clearAll}>✕ Limpiar todo</button>
+            )}
+          </div>
+
+          {/* Row 1: Colors + Foil */}
+          <div className="filter-row">
+            <span className="filter-label">Color</span>
+            {COLOR_OPTIONS.map(co => (
+              <button key={co.id} className={`color-chip${fColors.includes(co.id)?' active':''}`}
+                style={{background: co.bg}} title={co.label}
+                onClick={() => toggleColor(co.id)}>
+                {co.emoji}
+              </button>
+            ))}
+            <div style={{width:'1px',height:'22px',background:'var(--border)',margin:'0 4px'}} />
+            <span className="filter-label" style={{minWidth:'auto'}}>Foil</span>
+            {[['all','Todos'],['foil','✨ Foil'],['normal','Normal']].map(([val,lbl]) => (
+              <button key={val} className={`chip foil-chip${fFoil===val?' active':''}`}
+                onClick={() => setFFoil(val)}>{lbl}</button>
+            ))}
+          </div>
+
+          {/* Row 2: Rarity */}
+          <div className="filter-row">
+            <span className="filter-label">Rareza</span>
+            {RARITY_OPTIONS.map(ro => (
+              <button key={ro.id}
+                className={`chip${fRarity.includes(ro.id)?' active':''}`}
+                style={fRarity.includes(ro.id) ? {borderColor: ro.color, background: ro.color+'22', color: ro.color} : {}}
+                onClick={() => toggleRarity(ro.id)}>
+                <span style={{color: fRarity.includes(ro.id) ? ro.color : ro.color, marginRight:'3px'}}>{ro.sym}</span>
+                {ro.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Row 3: Types + Sort */}
+          <div className="filter-row">
+            <span className="filter-label">Tipo</span>
+            {TYPE_OPTIONS.map(to => (
+              <button key={to.id} className={`chip${fTypes.includes(to.id)?' active':''}`}
+                onClick={() => toggleType(to.id)}>{to.label}</button>
+            ))}
+            <div style={{width:'1px',height:'22px',background:'var(--border)',margin:'0 4px'}} />
+            <span className="filter-label" style={{minWidth:'auto'}}>Orden</span>
+            <select className="sort-select" value={sortBy} onChange={e=>setSortBy(e.target.value)}>
+              {SORT_OPTIONS.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
+            </select>
+            <span className="filter-count">
+              {displayed.length === collection.length
+                ? `${collection.length} cartas`
+                : `${displayed.length} / ${collection.length} cartas`}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Grid */}
+      {collection.length === 0 ? (
+        <div className="empty-state">
+          <div className="icon">🃏</div>
+          <h3>Esta carpeta está vacía</h3>
+          <p>Busca cartas arriba y elige edición + foil</p>
+        </div>
+      ) : displayed.length === 0 ? (
+        <div className="empty-state">
+          <div className="icon">🔍</div>
+          <h3>Sin resultados</h3>
+          <p>Ninguna carta coincide con los filtros activos</p>
+        </div>
+      ) : (
+        <div className="collection-grid">
+          {displayed.map(c => {
+            const price = c.isFoil
+              ? (c.priceFoilEur ? `€${parseFloat(c.priceFoilEur).toFixed(2)}` : '—')
+              : (c.priceEur ? `€${parseFloat(c.priceEur).toFixed(2)}` : '—');
+            return (
+              <div key={c.uid} className="coll-card">
+                {/* Image wrapper with relative positioning for badges */}
+                <div style={{position:'relative'}}>
+                  <FoilCardImage
+                    src={c.imgS || c.img}
+                    alt={c.name}
+                    isFoil={c.isFoil}
+                    onClick={() => setDetailCard(c)}
+                    onError={e => { e.target.src = fallbackImg(c.uid); }}
+                  />
+                  {c.isFoil && <div className="foil-badge">✨ FOIL</div>}
+                  {c.setCode && <div className="set-badge">{c.setCode}</div>}
+                  <div className={`price-badge${c.isFoil?' foil-price':''}`}>{price}</div>
+                </div>
+                <div className="coll-name">{c.name}</div>
+                <div className="coll-meta">×{c.count}{c.setName ? ` · ${c.setName.length > 18 ? c.setName.slice(0,16)+'…' : c.setName}` : ''}</div>
+                <div className="coll-actions">
+                  <button className="icon-btn" onClick={()=>changeCount(c.uid,-1)}>−</button>
+                  <button className="icon-btn" onClick={()=>changeCount(c.uid,+1)}>＋</button>
+                  <button className="icon-btn" onClick={()=>remove(c.uid)} style={{color:'var(--danger)'}}>🗑</button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Printing modal */}
+      {printingTarget && (
+        <PrintingModal cardName={printingTarget} onClose={()=>setPrintingTarget(null)} onAdd={addFromModal} />
+      )}
+
+      {/* Detail modal */}
+      {detailCard && (
+        <DetailModal
+          card={detailCard}
+          onClose={()=>setDetailCard(null)}
+          onChangeCount={(d)=>{changeCount(detailCard.uid,d);setDetailCard(null);}}
+          onUpdatePrice={(n,f)=>{updatePrice(detailCard.uid,n,f);showToast('💰 Precio actualizado');}}
+        />
+      )}
+    </div>
+  );
+}
+
+/* ─── COLLECTION SECTION (folder manager) ─── */
+function CollectionSection({ showToast }) {
+  const [folders, setFolders] = useState(() => {
+    try {
+      const saved = localStorage.getItem('mtg_folders');
+      if (saved) return JSON.parse(saved);
+      // Migrate old single collection
+      const old = localStorage.getItem('mtg_collection');
+      if (old) {
+        const cards = JSON.parse(old);
+        if (cards.length) return [{ id: 'folder-default', name: 'Mi Colección', cards }];
+      }
+    } catch {}
+    return [{ id: 'folder-default', name: 'Mi Colección', cards: [] }];
+  });
+
+  const [activeFolderId, setActiveFolderId] = useState(null);
+  const activeId = activeFolderId || folders[0]?.id;
+
+  useEffect(() => {
+    localStorage.setItem('mtg_folders', JSON.stringify(folders));
+  }, [folders]);
+
+  const updateFolderCards = (id, cards) =>
+    setFolders(prev => prev.map(f => f.id === id ? {...f, cards} : f));
+
+  const deleteFolder = (id, e) => {
+    e.stopPropagation();
+    if (folders.length <= 1) { showToast('❌ No puedes eliminar la única carpeta'); return; }
+    setFolders(prev => {
+      const next = prev.filter(f => f.id !== id);
+      if (activeId === id) setActiveFolderId(next[0].id);
+      return next;
+    });
+    showToast('🗑 Carpeta eliminada');
+  };
+
+  const exportFolder = (folder, e) => {
+    e.stopPropagation();
+    const data = { version: 1, folderName: folder.name, cards: folder.cards };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `mtg-${folder.name.replace(/\s+/g,'-').toLowerCase()}-${new Date().toISOString().slice(0,10)}.json`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+    showToast(`📤 "${folder.name}" exportada`);
+  };
+
+  // New / rename modal
+  const [folderModal, setFolderModal] = useState(null); // null | {mode:'new'|'rename', folderId?}
+  const [folderName, setFolderName] = useState('');
+
+  const openRename = (folder, e) => {
+    e.stopPropagation();
+    setFolderModal({ mode: 'rename', folderId: folder.id });
+    setFolderName(folder.name);
+  };
+
+  const confirmFolderModal = () => {
+    const name = folderName.trim() || 'Nueva Carpeta';
+    if (folderModal.mode === 'new') {
+      const id = `folder-${Date.now()}`;
+      setFolders(prev => [...prev, { id, name, cards: [] }]);
+      setActiveFolderId(id);
+    } else {
+      setFolders(prev => prev.map(f => f.id === folderModal.folderId ? {...f, name} : f));
+    }
+    setFolderModal(null);
+  };
+
+  // Import as new folder
+  const importRef = useRef();
+  const [importPending, setImportPending] = useState(null);
+  const [importFolderName, setImportFolderName] = useState('');
+
+  const handleImportFile = e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      try {
+        const raw = JSON.parse(ev.target.result);
+        let cards, suggestedName;
+        if (Array.isArray(raw)) {
+          cards = raw;
+          suggestedName = file.name.replace(/\.[^.]+$/, '') || 'Importada';
+        } else if (raw.version === 1 && raw.cards) {
+          cards = raw.cards;
+          suggestedName = raw.folderName || 'Importada';
+        } else { throw new Error(); }
+        setImportPending({ cards, suggestedName });
+        setImportFolderName(suggestedName);
+      } catch { showToast('❌ Archivo inválido'); }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  };
+
+  const confirmImport = () => {
+    if (!importPending) return;
+    const id = `folder-${Date.now()}`;
+    const name = importFolderName.trim() || importPending.suggestedName;
+    setFolders(prev => [...prev, { id, name, cards: importPending.cards }]);
+    setActiveFolderId(id);
+    showToast(`✅ "${name}" importada — ${importPending.cards.length} cartas`);
+    setImportPending(null);
+  };
+
+  const activeFolder = folders.find(f => f.id === activeId) || folders[0];
+
+  return (
+    <div className="collection-layout">
+      <h2 className="section-title">Mi Colección</h2>
+      <p className="section-sub">Organiza tus cartas en carpetas · Exporta y comparte colecciones completas</p>
+
+      {/* ── Folders bar ── */}
+      <div className="folders-bar">
+        {folders.map(f => {
+          const totalCards = f.cards.reduce((a, c) => a + c.count, 0);
+          return (
+            <div key={f.id} className={`folder-tab${f.id === activeId ? ' active' : ''}`} onClick={() => setActiveFolderId(f.id)}>
+              <span className="folder-tab-icon">📁</span>
+              <div className="folder-tab-info">
+                <div className="folder-tab-name">{f.name}</div>
+                <div className="folder-tab-count">{totalCards} {totalCards === 1 ? 'carta' : 'cartas'}</div>
+              </div>
+              <div className="folder-tab-actions">
+                <button className="folder-action-btn" title="Renombrar" onClick={e => openRename(f, e)}>✏️</button>
+                <button className="folder-action-btn" title="Exportar JSON" onClick={e => exportFolder(f, e)}>📤</button>
+                <button className="folder-action-btn danger" title="Eliminar carpeta" onClick={e => deleteFolder(f.id, e)}>🗑</button>
+              </div>
+            </div>
+          );
+        })}
+        <button className="new-folder-btn" onClick={() => { setFolderModal({ mode: 'new' }); setFolderName(''); }}>
+          ＋ Nueva carpeta
+        </button>
+        <input type="file" accept=".json" ref={importRef} onChange={handleImportFile} style={{ display: 'none' }} />
+        <button className="new-folder-btn" onClick={() => importRef.current.click()}>
+          📥 Importar
+        </button>
+      </div>
+
+      {/* ── Active folder ── */}
+      {activeFolder && (
+        <FolderView
+          key={activeFolder.id}
+          collection={activeFolder.cards}
+          setCollection={cards => updateFolderCards(activeFolder.id, cards)}
+          showToast={showToast}
+        />
+      )}
+
+      {/* ── New / Rename modal ── */}
+      {folderModal && (
+        <div className="folder-modal-overlay" onClick={() => setFolderModal(null)}>
+          <div className="folder-modal" onClick={e => e.stopPropagation()}>
+            <h3>{folderModal.mode === 'new' ? '📁 Nueva Carpeta' : '✏️ Renombrar Carpeta'}</h3>
+            <input
+              autoFocus
+              placeholder="Nombre de la carpeta"
+              value={folderName}
+              onChange={e => setFolderName(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') confirmFolderModal(); }}
+            />
+            <div className="folder-modal-actions">
+              <button className="btn btn-secondary" onClick={() => setFolderModal(null)}>Cancelar</button>
+              <button className="btn btn-primary" onClick={confirmFolderModal}>
+                {folderModal.mode === 'new' ? 'Crear' : 'Guardar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Import: name the new folder ── */}
+      {importPending && (
+        <div className="folder-modal-overlay" onClick={() => setImportPending(null)}>
+          <div className="folder-modal" onClick={e => e.stopPropagation()}>
+            <h3>📥 Importar como nueva carpeta</h3>
+            <p style={{ fontSize: '13px', color: 'var(--text2)', marginBottom: '12px' }}>
+              El archivo contiene <strong style={{ color: 'var(--text)' }}>{importPending.cards.length} cartas</strong>. ¿Cómo quieres llamar esta carpeta?
+            </p>
+            <input
+              autoFocus
+              placeholder="Nombre de la carpeta"
+              value={importFolderName}
+              onChange={e => setImportFolderName(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') confirmImport(); }}
+            />
+            <div className="folder-modal-actions">
+              <button className="btn btn-secondary" onClick={() => setImportPending(null)}>Cancelar</button>
+              <button className="btn btn-primary" onClick={confirmImport}>Importar</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─── APP ─── */
+function App() {
+  const [toast, setToast] = React.useState(null);
+  const toastRef = React.useRef();
+  const showToast = msg => {
+    setToast(msg);
+    clearTimeout(toastRef.current);
+    toastRef.current = setTimeout(() => setToast(null), 2800);
+  };
+  return (
+    <div className="app">
+      <header className="header">
+        <div className="header-logo">MTG Proxy <span>Studio</span></div>
+        <nav className="nav">
+          <a href="editor.html" className="nav-btn">✏️ Editor Proxy</a>
+          <a href="coleccion.html" className="nav-btn active">📦 Mi Colección</a>
+        </nav>
+      </header>
+      <main className="main">
+        <CollectionSection showToast={showToast} />
+      </main>
+      {toast && <div className="toast">{toast}</div>}
+    </div>
+  );
+}
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>
