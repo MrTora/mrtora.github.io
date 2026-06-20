@@ -3,7 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>MTG Proxy Studio — Editor</title>
+  <title>Kaza's Grimoire — Editor Proxy</title>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@400;700&display=swap" rel="stylesheet">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.development.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.development.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
@@ -11,18 +12,30 @@
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     :root {
-      --bg: #0f0f13; --surface: #1a1a24; --surface2: #23232f; --border: #2e2e3e;
+      --bg: transparent; --surface: rgba(18,16,26,0.82); --surface2: rgba(28,26,38,0.88); --border: rgba(52,48,70,0.9);
       --accent: #c49a2a; --accent2: #8b5cf6; --text: #e8e8f0; --text2: #8888aa;
       --danger: #e05555; --radius: 8px;
     }
-    body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; min-height: 100vh; }
+    body {
+      background-color: var(--bg);
+      background-image:
+        linear-gradient(rgba(8,6,12,0.55), rgba(8,6,12,0.55)),
+        url('static/wallpaper.png');
+      background-size: cover;
+      background-repeat: no-repeat;
+      background-attachment: fixed;
+      background-position: center center;
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      min-height: 100vh;
+    }
     button { cursor: pointer; border: none; font-family: inherit; }
     input, select, textarea { font-family: inherit; }
     .app { display: flex; flex-direction: column; min-height: 100vh; }
 
     /* Header */
     .header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 24px; display: flex; align-items: center; gap: 20px; height: 58px; }
-    .header-logo { font-size: 20px; font-weight: 700; color: var(--accent); letter-spacing: 1px; }
+    .header-logo { font-family: 'Cinzel Decorative', 'Palatino Linotype', serif; font-size: 17px; font-weight: 700; color: var(--accent); letter-spacing: 1px; line-height: 1; }
     .header-logo span { color: var(--text2); font-weight: 400; }
     .nav { display: flex; gap: 4px; margin-left: auto; }
     .nav-btn { padding: 7px 16px; border-radius: var(--radius); background: transparent; color: var(--text2); font-size: 14px; font-weight: 500; transition: all .15s; text-decoration: none; display: inline-flex; align-items: center; }
@@ -305,6 +318,19 @@
     /* Editor card scale wrapper — carta 244×341px escalada 1.5× = 366×512px */
     .editor-card-outer { width: 366px; height: 512px; flex-shrink: 0; position: relative; }
     .editor-card-scale { transform: scale(1.5); transform-origin: top left; width: 244px; height: 341px; position: absolute; top: 0; left: 0; }
+
+    /* ── Grimoire typography ── */
+    h3,
+    .form-row label,
+    .preview-label,
+    .frame-custom-label,
+    .frame-opt-label {
+      font-family: 'Cinzel Decorative', 'Palatino Linotype', serif;
+    }
+    .form-row label,
+    .frame-opt-label,
+    .frame-custom-label,
+    .preview-label { font-size: 10px; letter-spacing: .3px; }
 
     @media print {
       @page { size: A4; margin: 8mm; }
@@ -1590,7 +1616,7 @@ function App() {
   return (
     <div className="app">
       <header className="header">
-        <div className="header-logo">MTG Proxy <span>Studio</span></div>
+        <div className="header-logo">Kaza's <span>Grimoire</span></div>
         <nav className="nav">
           <a href="editor.html" className="nav-btn active">✏️ Editor Proxy</a>
           <a href="coleccion.html" className="nav-btn">📦 Mi Colección</a>
