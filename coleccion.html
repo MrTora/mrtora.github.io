@@ -755,7 +755,7 @@ function FoilCardImage({ src, alt, isFoil, className, onClick, onError }) {
 }
 
 /* ─── PRINTING SELECTOR MODAL ─── */
-function PrintingModal({ cardName, onClose, onAdd }) {
+function PrintingModal({ cardName, onClose, onAdd, replaceMode = false }) {
   const [printings, setPrintings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState(null);
@@ -954,23 +954,25 @@ function PrintingModal({ cardName, onClose, onAdd }) {
           {isFoil && !hasFoil && selected && (
             <span style={{fontSize:'11px',color:'var(--text2)'}}>Sin precio foil disponible</span>
           )}
-          <div style={{display:'flex',alignItems:'center',gap:'6px'}}>
-            <span style={{fontSize:'12px',color:'var(--text2)',fontWeight:600}}>Cantidad:</span>
-            <input
-              type="number" min="1" max="99"
-              value={initialCount}
-              onChange={e => setInitialCount(Math.max(1, parseInt(e.target.value)||1))}
-              style={{
-                width:'56px', padding:'5px 8px', borderRadius:'6px', fontSize:'14px', fontWeight:700,
-                background:'var(--surface2)', border:'1px solid var(--border)', color:'var(--text)',
-                textAlign:'center',
-              }}
-            />
-          </div>
+          {!replaceMode && (
+            <div style={{display:'flex',alignItems:'center',gap:'6px'}}>
+              <span style={{fontSize:'12px',color:'var(--text2)',fontWeight:600}}>Cantidad:</span>
+              <input
+                type="number" min="1" max="99"
+                value={initialCount}
+                onChange={e => setInitialCount(Math.max(1, parseInt(e.target.value)||1))}
+                style={{
+                  width:'56px', padding:'5px 8px', borderRadius:'6px', fontSize:'14px', fontWeight:700,
+                  background:'var(--surface2)', border:'1px solid var(--border)', color:'var(--text)',
+                  textAlign:'center',
+                }}
+              />
+            </div>
+          )}
           <div style={{marginLeft:'auto',display:'flex',gap:'8px'}}>
             <button className="btn btn-secondary" onClick={onClose}>Cancelar</button>
             <button className="btn btn-primary" onClick={handleAdd} disabled={!selected}>
-              Añadir {initialCount > 1 ? `×${initialCount} ` : ''}a colección
+              {replaceMode ? '🔄 Usar esta edición' : `Añadir ${initialCount > 1 ? `×${initialCount} ` : ''}a colección`}
             </button>
           </div>
         </div>
@@ -1518,12 +1520,86 @@ function ImportDeckModal({ onClose, onImport }) {
 }
 
 /* ─── DECK VIEW ─── */
-function DeckView({ deck, allCollectionCards }) {
+function DeckView({ deck, allCollectionCards, onReplaceEntry, onDeleteDeck }) {
   const [cardData, setCardData] = useState({});
   const [loadingCards, setLoadingCards] = useState(true);
   const [loadProgress, setLoadProgress] = useState({ done: 0, total: 0, fromCache: 0 });
   const [refreshKey, setRefreshKey] = useState(0);
   const forceRefreshRef = useRef(false);
+  const [replacingEntry, setReplacingEntry] = useState(null);
+
+  // ── 17lands win rate ──
+  const [showWR, setShowWR]         = useState(false);
+  const [wrFormat, setWrFormat]     = useState('PremierDraft');
+  const [winRateData, setWinRateData] = useState({});
+  const [wrLoading, setWrLoading]   = useState(false);
+  const [wrError, setWrError]       = useState('');
+  const wrCache = useRef({});  // { 'SET-FORMAT': { name: { gihWR, nGames, avgPick } } }
+
+  const WR_FORMATS = [
+    { id: 'PremierDraft',  label: 'Premier Draft' },
+    { id: 'TradDraft',     label: 'Traditional Draft' },
+    { id: 'Sealed',        label: 'Sellado' },
+    { id: 'QuickDraft',    label: 'Quick Draft' },
+  ];
+
+  const fetchWinRates = async () => {
+    setWrLoading(true); setWrError('');
+    const sets = [...new Set(deck.entries.map(e => e.set.toUpperCase()))];
+    const newData = {};
+    let anyError = false;
+
+    for (const set of sets) {
+      const key = `${set}-${wrFormat}`;
+      if (wrCache.current[key]) { Object.assign(newData, wrCache.current[key]); continue; }
+      const base = `https://www.17lands.com/card_ratings/data?expansion=${set}&format=${wrFormat}`;
+      let cards = null;
+      // Intento directo primero, luego proxy CORS
+      for (const url of [base, `https://corsproxy.io/?${encodeURIComponent(base)}`]) {
+        try {
+          const r = await fetch(url);
+          if (!r.ok) continue;
+          cards = await r.json();
+          break;
+        } catch { continue; }
+      }
+      if (!Array.isArray(cards)) { anyError = true; continue; }
+      const setData = {};
+      for (const c of cards) {
+        if (c.ever_drawn_win_rate != null) {
+          const norm = c.name?.trim().toLowerCase();
+          setData[norm] = {
+            gihWR:   c.ever_drawn_win_rate,
+            nGames:  c.ever_drawn_game_count || 0,
+            avgPick: c.avg_pick ?? null,
+          };
+        }
+      }
+      wrCache.current[key] = setData;
+      Object.assign(newData, setData);
+    }
+
+    setWinRateData(prev => ({ ...prev, ...newData }));
+    if (anyError) setWrError('Algunos sets no tienen datos en 17lands para este formato, o el servicio no está disponible.');
+    setWrLoading(false);
+  };
+
+  // Busca win rate de una entrada (maneja doble cara)
+  const getWR = entryName => {
+    const norm = entryName.trim().toLowerCase();
+    if (winRateData[norm]) return winRateData[norm];
+    // Fallback doble cara: buscar por primera parte
+    const front = norm.split(' // ')[0];
+    return Object.entries(winRateData).find(([k]) => k === front || k.startsWith(front + ' //'))?.[1] || null;
+  };
+
+  const wrBadgeStyle = wr => {
+    if (wr >= 0.60) return { bg: '#7c3aed', label: 'Bomba' };
+    if (wr >= 0.57) return { bg: '#059669', label: 'Excelente' };
+    if (wr >= 0.53) return { bg: '#d97706', label: 'Buena' };
+    if (wr >= 0.50) return { bg: '#64748b', label: 'Media' };
+    return                  { bg: '#dc2626', label: 'Baja' };
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -1571,9 +1647,37 @@ function DeckView({ deck, allCollectionCards }) {
     setRefreshKey(k => k + 1);
   };
 
-  const getOwned = name => allCollectionCards
-    .filter(c => c.name.toLowerCase() === name.toLowerCase())
-    .reduce((sum, c) => sum + c.count, 0);
+  // Retorna { count, displayCard, hasDifferentEdition }
+  // Maneja cartas de doble cara: "Foo // Bar" en colección vs "Foo" en deck (y viceversa)
+  const getOwnedInfo = entry => {
+    const norm = s => s.trim().toLowerCase();
+    const deckName = norm(entry.name);
+    const matches = allCollectionCards.filter(c => {
+      const colName = norm(c.name);
+      return colName === deckName
+        || colName.startsWith(deckName + ' //')   // colección: "Foo // Bar", deck: "Foo"
+        || deckName.startsWith(colName + ' //');  // colección: "Foo", deck: "Foo // Bar"
+    });
+    const totalOwned = matches.reduce((sum, c) => sum + c.count, 0);
+    const exactMatch = matches.find(c =>
+      c.setCode?.toLowerCase() === entry.set?.toLowerCase()
+    );
+    const displayCard = exactMatch || matches[0] || null;
+    const hasDifferentEdition = !!(displayCard && !exactMatch);
+    return { count: totalOwned, displayCard, hasDifferentEdition };
+  };
+  const getOwned = name => getOwnedInfo({ name, set: '' }).count;
+
+  // Exportar deck en formato MTGA
+  const exportDeck = () => {
+    const lines = ['Deck', ...deck.entries.map(e => `${e.qty} ${e.name} (${e.set}) ${e.number}`)];
+    const blob = new Blob([lines.join('\n')], { type: 'text/plain' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `${deck.name.replace(/\s+/g, '-').toLowerCase()}.txt`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
 
   const getType = entry => {
     const tl = (cardData[entry.name]?.typeLine || '').toLowerCase();
@@ -1603,9 +1707,9 @@ function DeckView({ deck, allCollectionCards }) {
   for (const entry of deck.entries) grouped[getType(entry)].push(entry);
 
   const totalNeeded  = deck.entries.reduce((s, e) => s + e.qty, 0);
-  const totalOwned   = deck.entries.reduce((s, e) => s + Math.min(e.qty, getOwned(e.name)), 0);
+  const totalOwned   = deck.entries.reduce((s, e) => s + Math.min(e.qty, getOwnedInfo(e).count), 0);
   const uniqueNeeded = deck.entries.length;
-  const uniqueOwned  = deck.entries.filter(e => getOwned(e.name) >= e.qty).length;
+  const uniqueOwned  = deck.entries.filter(e => getOwnedInfo(e).count >= e.qty).length;
   const pct = totalNeeded > 0 ? Math.round(totalOwned / totalNeeded * 100) : 0;
   const pctColor = pct === 100 ? '#4ade80' : pct >= 50 ? 'var(--accent)' : 'var(--danger)';
 
@@ -1759,12 +1863,87 @@ function DeckView({ deck, allCollectionCards }) {
             >
               🎲 Mano aleatoria
             </button>
+            <button
+              className="btn btn-secondary"
+              style={{fontSize:'13px',padding:'8px 16px'}}
+              onClick={exportDeck}
+              title="Exportar en formato MTGA"
+            >
+              📤 Exportar
+            </button>
+            <button
+              className="btn btn-secondary"
+              style={{fontSize:'13px',padding:'8px 16px', borderColor: showWR ? 'var(--accent2)' : 'var(--border)', color: showWR ? 'var(--accent2)' : 'var(--text2)'}}
+              onClick={() => setShowWR(v => !v)}
+              title="Ver datos de win rate por carta (17lands)"
+            >
+              📊 Win Rate
+            </button>
+            {onDeleteDeck && (
+              <button
+                className="btn btn-secondary"
+                style={{fontSize:'13px',padding:'8px 16px',borderColor:'var(--danger)',color:'var(--danger)'}}
+                onClick={() => { if (window.confirm(`¿Eliminar el deck "${deck.name}"?`)) onDeleteDeck(); }}
+              >
+                🗑 Eliminar deck
+              </button>
+            )}
           </div>
         </div>
         <div className="deck-progress-bar">
           <div className="deck-progress-fill" style={{width:`${pct}%`,background:pctColor}} />
         </div>
       </div>
+
+      {/* ── Panel 17lands ── */}
+      {showWR && (
+        <div style={{background:'var(--surface)',border:'1px solid var(--border)',borderRadius:'12px',padding:'14px 16px',display:'flex',flexDirection:'column',gap:'10px'}}>
+          <div style={{display:'flex',alignItems:'center',gap:'10px',flexWrap:'wrap'}}>
+            <span style={{fontSize:'13px',fontWeight:700,color:'var(--text)'}}>📊 17lands — Win Rate por carta</span>
+            <select
+              value={wrFormat}
+              onChange={e => setWrFormat(e.target.value)}
+              style={{background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:'6px',padding:'5px 10px',color:'var(--text)',fontSize:'12px',cursor:'pointer'}}
+            >
+              {WR_FORMATS.map(f => <option key={f.id} value={f.id}>{f.label}</option>)}
+            </select>
+            <button
+              className="btn btn-primary"
+              style={{fontSize:'12px',padding:'6px 14px'}}
+              onClick={fetchWinRates}
+              disabled={wrLoading}
+            >
+              {wrLoading ? '⏳ Cargando…' : '🔄 Cargar datos'}
+            </button>
+            {Object.keys(winRateData).length > 0 && (
+              <span style={{fontSize:'11px',color:'var(--text2)'}}>
+                {Object.keys(winRateData).length} cartas con datos
+              </span>
+            )}
+          </div>
+          {/* Leyenda */}
+          <div style={{display:'flex',gap:'8px',flexWrap:'wrap',alignItems:'center'}}>
+            <span style={{fontSize:'10px',color:'var(--text2)',fontWeight:700,textTransform:'uppercase',letterSpacing:'.4px'}}>GIH WR:</span>
+            {[
+              { label:'Bomba ≥60%',    bg:'#7c3aed' },
+              { label:'Excelente ≥57%',bg:'#059669' },
+              { label:'Buena ≥53%',    bg:'#d97706' },
+              { label:'Media ≥50%',    bg:'#64748b' },
+              { label:'Baja <50%',     bg:'#dc2626' },
+            ].map(b => (
+              <span key={b.label} style={{display:'flex',alignItems:'center',gap:'4px',fontSize:'10px',color:'var(--text2)'}}>
+                <span style={{width:'10px',height:'10px',borderRadius:'2px',background:b.bg,display:'inline-block'}}/>
+                {b.label}
+              </span>
+            ))}
+          </div>
+          {wrError && <div style={{fontSize:'11px',color:'var(--danger)',lineHeight:1.5}}>{wrError}</div>}
+          <div style={{fontSize:'11px',color:'var(--text2)',lineHeight:1.5}}>
+            Datos de <strong style={{color:'var(--text)'}}>17lands.com</strong> — GIH WR = % victorias en partidas donde tuviste esta carta en mano.
+            Solo disponible para sets y formatos limitados (Draft/Sealed) con datos suficientes.
+          </div>
+        </div>
+      )}
 
       {/* Mana curve */}
       {!loadingCards && Object.keys(manaCurve).length > 0 && (
@@ -1877,6 +2056,32 @@ function DeckView({ deck, allCollectionCards }) {
         </div>
       )}
 
+      {/* Replace entry modal */}
+      {replacingEntry && (
+        <PrintingModal
+          cardName={replacingEntry.name}
+          onClose={() => setReplacingEntry(null)}
+          replaceMode={true}
+          onAdd={card => {
+            // Usar replacingEntry.name como clave (igual que fetchAll) para no perder typeLine
+            const entryName = replacingEntry.name;
+            setCardData(prev => ({
+              ...prev,
+              [entryName]: {
+                img: card.imgS || card.img,
+                imgNormal: card.img,
+                typeLine: prev[entryName]?.typeLine || card.typeLine,
+                manaCost: prev[entryName]?.manaCost || card.manaCost,
+                cmc: prev[entryName]?.cmc,
+                priceEur: card.priceEur,
+              }
+            }));
+            onReplaceEntry && onReplaceEntry(entryName, card.setCode, card.collectorNumber);
+            setReplacingEntry(null);
+          }}
+        />
+      )}
+
       {/* Type sections */}
       {TYPE_ORDER.map(({ key, label }) => {
         const entries = grouped[key];
@@ -1897,11 +2102,15 @@ function DeckView({ deck, allCollectionCards }) {
               </span>
             </div>
             {entries.map(entry => {
-              const owned   = getOwned(entry.name);
+              const { count: owned, displayCard, hasDifferentEdition } = getOwnedInfo(entry);
               const needed  = entry.qty;
               const complete = owned >= needed;
               const partial  = owned > 0 && owned < needed;
-              const img      = cardData[entry.name]?.img || '';
+              const apiImg   = cardData[entry.name]?.img || '';
+              // Si el usuario tiene la carta en otra edición, mostrar su imagen
+              const img = hasDifferentEdition
+                ? (displayCard.imgS || displayCard.img || apiImg)
+                : apiImg;
               const tl       = cardData[entry.name]?.typeLine || '';
               const statusColor = complete ? '#4ade80' : partial ? 'var(--accent)' : 'var(--danger)';
               const rowBg    = complete
@@ -1939,6 +2148,11 @@ function DeckView({ deck, allCollectionCards }) {
                       <span>{entry.set} #{entry.number}</span>
                       {tl && <span style={{opacity:.6}}>{tl.split('—')[0].trim()}</span>}
                     </div>
+                    {hasDifferentEdition && (
+                      <div style={{fontSize:'10px',color:'var(--accent)',marginTop:'2px'}}>
+                        📦 Tienes: {displayCard.setCode}{displayCard.setName ? ` · ${displayCard.setName.slice(0,22)}` : ''}
+                      </div>
+                    )}
                   </div>
                   {/* Price column */}
                   <div style={{textAlign:'right',flexShrink:0,minWidth:'52px'}}>
@@ -1961,6 +2175,43 @@ function DeckView({ deck, allCollectionCards }) {
                   <div style={{fontSize:'16px',flexShrink:0,width:'20px',textAlign:'center'}}>
                     {complete ? '✅' : partial ? '⚠️' : '❌'}
                   </div>
+                  {/* Win rate badge */}
+                  {showWR && (() => {
+                    const wr = getWR(entry.name);
+                    if (!wr) return showWR && !wrLoading
+                      ? <div style={{fontSize:'9px',color:'var(--text2)',flexShrink:0,width:'44px',textAlign:'center',lineHeight:1.3}}>sin datos</div>
+                      : null;
+                    const { bg } = wrBadgeStyle(wr.gihWR);
+                    return (
+                      <div style={{
+                        flexShrink:0,textAlign:'center',minWidth:'48px',
+                        background:bg,borderRadius:'5px',padding:'3px 5px',
+                        display:'flex',flexDirection:'column',gap:'1px',
+                      }}
+                        title={`GIH WR: ${(wr.gihWR*100).toFixed(1)}% · ${wr.nGames.toLocaleString()} partidas${wr.avgPick!=null?' · ATA: '+wr.avgPick.toFixed(1):''}`}
+                      >
+                        <span style={{fontSize:'11px',fontWeight:700,color:'#fff'}}>{(wr.gihWR*100).toFixed(1)}%</span>
+                        <span style={{fontSize:'8px',color:'rgba(255,255,255,.75)',fontWeight:600,letterSpacing:'.3px'}}>GIH WR</span>
+                        {wr.avgPick != null && (
+                          <span style={{fontSize:'8px',color:'rgba(255,255,255,.65)'}}>ATA {wr.avgPick.toFixed(1)}</span>
+                        )}
+                      </div>
+                    );
+                  })()}
+                  <button
+                    onClick={e => { e.stopPropagation(); setReplacingEntry(entry); }}
+                    title="Cambiar edición de esta carta en el deck"
+                    style={{
+                      fontSize:'10px', padding:'3px 7px', borderRadius:'5px', flexShrink:0,
+                      background:'var(--surface2)', border:'1px solid var(--border)',
+                      color:'var(--text2)', cursor:'pointer', lineHeight:1.4,
+                      transition:'border-color .12s, color .12s',
+                    }}
+                    onMouseEnter={e=>{e.currentTarget.style.borderColor='var(--accent2)';e.currentTarget.style.color='var(--text)';}}
+                    onMouseLeave={e=>{e.currentTarget.style.borderColor='var(--border)';e.currentTarget.style.color='var(--text2)';}}
+                  >
+                    🔄<br/>Cambiar
+                  </button>
                 </div>
               );
             })}
@@ -2189,6 +2440,16 @@ function CollectionSection({ showToast }) {
                     <div className="folder-tab-count" style={{color:pctColor,fontWeight:700}}>{pct}% · {totalCards} cartas</div>
                   </div>
                   <div className="folder-tab-actions">
+                    <button className="folder-action-btn" title="Exportar deck (formato MTGA)" onClick={e=>{
+                      e.stopPropagation();
+                      const lines = ['Deck', ...d.entries.map(e => `${e.qty} ${e.name} (${e.set}) ${e.number}`)];
+                      const blob = new Blob([lines.join('\n')], { type: 'text/plain' });
+                      const a = document.createElement('a');
+                      a.href = URL.createObjectURL(blob);
+                      a.download = `${d.name.replace(/\s+/g,'-').toLowerCase()}.txt`;
+                      a.click();
+                      URL.revokeObjectURL(a.href);
+                    }}>📤</button>
                     <button className="folder-action-btn danger" title="Eliminar deck" onClick={e=>{e.stopPropagation();deleteDeck(d.id);}}>🗑</button>
                   </div>
                 </div>
@@ -2200,7 +2461,23 @@ function CollectionSection({ showToast }) {
           </div>
 
           {activeDeck ? (
-            <DeckView key={activeDeck.id} deck={activeDeck} allCollectionCards={allCollectionCards} />
+            <DeckView
+              key={activeDeck.id}
+              deck={activeDeck}
+              allCollectionCards={allCollectionCards}
+              onReplaceEntry={(entryName, newSet, newNumber) => {
+                setDecks(prev => prev.map(d =>
+                  d.id !== activeDeck.id ? d : {
+                    ...d,
+                    entries: d.entries.map(e =>
+                      e.name === entryName ? { ...e, set: newSet, number: newNumber } : e
+                    )
+                  }
+                ));
+                showToast(`🔄 ${entryName} → ${newSet}`);
+              }}
+              onDeleteDeck={() => deleteDeck(activeDeck.id)}
+            />
           ) : (
             <div className="empty-state">
               <div className="icon">🃏</div>
