@@ -3,48 +3,278 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta http-equiv="refresh" content="0; url=editor.html" />
   <title>MTG Proxy Studio</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
     body {
-      background: #0f0f13; color: #e8e8f0;
-      font-family: 'Segoe UI', system-ui, sans-serif;
-      min-height: 100vh; display: flex; align-items: center; justify-content: center;
+      background: #010101;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Palatino Linotype', Palatino, 'Book Antiqua', Georgia, serif;
+      overflow: hidden;
     }
-    .hub {
-      text-align: center; display: flex; flex-direction: column; align-items: center; gap: 32px;
+
+    .book-wrapper {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transform-origin: center center;
     }
-    .logo { font-size: 28px; font-weight: 700; color: #c49a2a; letter-spacing: 1px; }
-    .logo span { color: #8888aa; font-weight: 400; }
-    .cards { display: flex; gap: 20px; flex-wrap: wrap; justify-content: center; }
-    .card {
-      display: flex; flex-direction: column; align-items: center; gap: 12px;
-      background: #1a1a24; border: 1px solid #2e2e3e; border-radius: 14px;
-      padding: 32px 40px; text-decoration: none; color: inherit;
-      transition: all .15s; min-width: 180px;
+
+    .stars {
+      position: fixed; inset: 0; pointer-events: none; z-index: 0;
+      background:
+        radial-gradient(1px 1px at 10% 15%, #ffffff44 0%, transparent 100%),
+        radial-gradient(1px 1px at 25% 40%, #ffffff33 0%, transparent 100%),
+        radial-gradient(1px 1px at 40% 10%, #ffffff55 0%, transparent 100%),
+        radial-gradient(1px 1px at 60% 60%, #ffffff22 0%, transparent 100%),
+        radial-gradient(1px 1px at 75% 20%, #ffffff44 0%, transparent 100%),
+        radial-gradient(1px 1px at 85% 50%, #ffffff33 0%, transparent 100%),
+        radial-gradient(1px 1px at 50% 80%, #ffffff55 0%, transparent 100%),
+        radial-gradient(1px 1px at 90% 90%, #ffffff22 0%, transparent 100%),
+        radial-gradient(1px 1px at 15% 70%, #ffffff33 0%, transparent 100%),
+        radial-gradient(1px 1px at 35% 55%, #ffffff44 0%, transparent 100%),
+        radial-gradient(1px 1px at 65% 35%, #ffffff22 0%, transparent 100%),
+        radial-gradient(1px 1px at 5%  50%, #ffffff33 0%, transparent 100%);
     }
-    .card:hover { border-color: #8b5cf6; background: #23232f; transform: translateY(-3px); }
-    .card .icon { font-size: 40px; }
-    .card .title { font-size: 16px; font-weight: 700; }
-    .card .desc { font-size: 13px; color: #8888aa; }
+
+    .scene {
+      position: relative; z-index: 1;
+      perspective: 1800px;
+      width: 360px;
+      height: 420px;
+      cursor: pointer;
+      background: #010101;
+      transition: width 0.9s cubic-bezier(0.645, 0.045, 0.355, 1.000);
+    }
+
+    .scene.open {
+      width: 720px;
+      cursor: default;
+    }
+
+    .book {
+      position: relative;
+      width: 100%; height: 100%;
+      transform-style: preserve-3d;
+    }
+
+    .page {
+      position: absolute;
+      top: 0; bottom: 0;
+      width: 50%;
+      background: transparent;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .cover {
+      position: absolute;
+      inset: 0;
+      background-color: #010101;
+      border-radius: 4px 12px 12px 4px;
+      border: 2px solid transparent;
+      z-index: 10;
+      transform-origin: left center;
+      transform-style: preserve-3d;
+      transition: transform 0.9s cubic-bezier(0.645, 0.045, 0.355, 1.000);
+      backface-visibility: hidden;
+      overflow: hidden;
+      box-shadow: inset 0 0 60px #010101aa, 4px 0 20px #010101cc, 0 0 40px #c49a2a33;
+    }
+
+    .book.open .cover { transform: rotateY(-175deg); }
+
+    .cover-hint {
+      position: absolute;
+      bottom: 24px;
+      color: #8a683088;
+      font-size: 11px;
+      letter-spacing: 2px;
+      animation: pulse 2.5s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 0.4; }
+      50% { opacity: 1; }
+    }
+
+    .page-left {
+      left: 0;
+      background-image: url('static/grimoire_open.png');
+      background-size: 720px 420px;
+      background-position: left top;
+      z-index: 1;
+    }
+
+    .page-right {
+      right: 0;
+      background-image: url('static/grimoire_open.png');
+      background-size: 720px 420px;
+      background-position: right top;
+      z-index: 1;
+    }
+
+    .page-content {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      padding: 40px 32px;
+      height: 100%;
+      width: 100%;
+      text-decoration: none;
+      color: inherit;
+    }
+
+    .page-content:hover .page-icon { transform: scale(1.08); }
+    .page-content:hover .page-nav-title { color: #7a3e1a; }
+
+    .page-img {
+      width: 224px;
+      height: auto;
+      border-radius: 6px;
+      transition: transform 0.25s ease;
+      filter: drop-shadow(0 2px 10px #01010155);
+    }
+    .page-content:hover .page-img { transform: scale(1.06); }
+
+    .page-nav-title {
+      font-size: 18px;
+      font-weight: bold;
+      color: #2e1204;
+      letter-spacing: 1.5px;
+      text-align: center;
+      text-transform: uppercase;
+      transition: color 0.2s ease;
+    }
+
+    .page-nav-desc {
+      font-size: 17px;
+      color: #3a1f08;
+      text-align: center;
+      line-height: 1.7;
+      font-style: italic;
+    }
+
+    .close-btn {
+      position: fixed;
+      top: 24px; right: 28px;
+      background: none;
+      border: 1px solid #5c301055;
+      color: #8a6830;
+      font-family: inherit;
+      font-size: 13px;
+      letter-spacing: 2px;
+      padding: 6px 14px;
+      border-radius: 4px;
+      cursor: pointer;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.4s ease;
+    }
+    .close-btn.visible { opacity: 1; pointer-events: all; }
+    .close-btn:hover { border-color: #c49a2a88; color: #c49a2a; }
+
+    .book-shadow {
+      position: absolute;
+      bottom: -20px; left: 50%;
+      transform: translateX(-50%);
+      width: 80%; height: 20px;
+      background: radial-gradient(ellipse, #01010188, transparent 70%);
+      border-radius: 50%;
+      z-index: 0;
+    }
   </style>
 </head>
 <body>
-  <div class="hub">
-    <div class="logo">MTG Proxy <span>Studio</span></div>
-    <div class="cards">
-      <a href="editor.html" class="card">
-        <div class="icon">✏️</div>
-        <div class="title">Editor Proxy</div>
-        <div class="desc">Diseña cartas personalizadas</div>
-      </a>
-      <a href="coleccion.html" class="card">
-        <div class="icon">📦</div>
-        <div class="title">Mi Colección</div>
-        <div class="desc">Gestiona tu portafolio</div>
-      </a>
+  <div class="stars"></div>
+  <button class="close-btn" id="closeBtn">✦ CERRAR</button>
+
+  <div class="book-wrapper" id="bookWrapper">
+  <div class="scene" id="scene">
+    <div class="book" id="book">
+
+
+      <!-- Left page: Editor -->
+      <div class="page page-left">
+        <a href="editor.html" class="page-content" onclick="event.stopPropagation()">
+          <img src="static/proxy_builder.png" alt="Editor Proxy" class="page-img" />
+          <div class="page-nav-desc">Diseña y forja<br>tus cartas</div>
+        </a>
+      </div>
+
+      <!-- Right page: Colección -->
+      <div class="page page-right">
+        <a href="coleccion.html" class="page-content" onclick="event.stopPropagation()">
+          <img src="static/spell_collection.png" alt="Mi Colección" class="page-img" />
+          <div class="page-nav-desc">Gestiona y contempla<br>tu portafolio</div>
+        </a>
+      </div>
+
+      <!-- Front cover -->
+      <div class="cover" id="cover">
+        <img src="static/grimoire_background.png" alt="" style="
+          position: absolute;
+          top: -4px; left: 0;
+          width: 360px; height: 460px;
+          object-fit: cover; object-position: center top;
+          pointer-events: none;
+        " />
+        <div class="cover-hint">— toca para abrir —</div>
+      </div>
+
     </div>
+    <div class="book-shadow"></div>
   </div>
+  </div>
+
+  <script>
+    const scene    = document.getElementById('scene');
+    const book     = document.getElementById('book');
+    const closeBtn = document.getElementById('closeBtn');
+    let isOpen = false;
+
+    function openBook() {
+      if (isOpen) return;
+      isOpen = true;
+      scene.classList.add('open');
+      book.classList.add('open');
+      closeBtn.classList.add('visible');
+      setTimeout(scaleBook, 50);
+    }
+
+    function closeBook() {
+      if (!isOpen) return;
+      isOpen = false;
+      scene.classList.remove('open');
+      book.classList.remove('open');
+      closeBtn.classList.remove('visible');
+      setTimeout(scaleBook, 50);
+    }
+
+    scene.addEventListener('click', openBook);
+    closeBtn.addEventListener('click', closeBook);
+
+    const wrapper = document.getElementById('bookWrapper');
+
+    function scaleBook() {
+      const bookW = isOpen ? 720 : 360;
+      const bookH = 420;
+      const vw = window.innerWidth  - 40;
+      const vh = window.innerHeight - 40;
+      const scale = Math.min(1, vw / bookW, vh / bookH);
+      wrapper.style.transform = `scale(${scale})`;
+    }
+
+    window.addEventListener('resize', scaleBook);
+    scaleBook();
+  </script>
 </body>
 </html>

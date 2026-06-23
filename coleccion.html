@@ -29,6 +29,26 @@
       min-height: 100vh;
     }
     button { cursor: pointer; border: none; font-family: inherit; }
+
+    .back-btn {
+      position: fixed;
+      top: 24px; left: 28px;
+      background: none;
+      border: 1px solid rgba(92,48,16,0.33);
+      color: #8a6830;
+      font-family: 'Palatino Linotype', Palatino, serif;
+      font-size: 13px;
+      letter-spacing: 2px;
+      padding: 6px 14px;
+      border-radius: 4px;
+      cursor: pointer;
+      z-index: 9999;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      transition: border-color .2s, color .2s;
+    }
+    .back-btn:hover { border-color: rgba(196,154,42,0.53); color: #c49a2a; }
     input, select, textarea { font-family: inherit; }
     .app { display: flex; flex-direction: column; min-height: 100vh; }
 
@@ -567,6 +587,7 @@
   </style>
 </head>
 <body>
+<a href="index.html" class="back-btn">✦ VOLVER</a>
 <div id="root"></div>
 
 <script type="text/babel">
@@ -2558,13 +2579,6 @@ function App() {
   };
   return (
     <div className="app">
-      <header className="header">
-        <img src="static/logo.png" alt="Kaza's Grimoire" style={{height:'48px',width:'auto',display:'block',filter:'drop-shadow(0 2px 8px rgba(196,154,42,.45))'}} />
-        <nav className="nav">
-          <a href="editor.html" className="nav-btn">✏️ Editor Proxy</a>
-          <a href="coleccion.html" className="nav-btn active">📦 Mi Colección</a>
-        </nav>
-      </header>
       <main className="main">
         <CollectionSection showToast={showToast} />
       </main>
