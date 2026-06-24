@@ -191,6 +191,22 @@
       border-radius: 50%;
       z-index: 0;
     }
+
+    /* Footer */
+    .page-footer {
+      position: fixed;
+      bottom: 0; left: 0; right: 0;
+      text-align: center;
+      font-family: 'Palatino Linotype', Palatino, serif;
+      font-size: 12px;
+      letter-spacing: 3px;
+      color: #d4aa44;
+      padding: 14px 0 16px;
+      border-top: 1px solid rgba(196,154,42,0.25);
+      pointer-events: none;
+      white-space: nowrap;
+      z-index: 9998;
+    }
   </style>
 </head>
 <body>
@@ -276,5 +292,6 @@
     window.addEventListener('resize', scaleBook);
     scaleBook();
   </script>
+  <div class="page-footer">✦ creado por mr.tora · 2026 ✦</div>
 </body>
 </html>

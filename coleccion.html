@@ -33,9 +33,9 @@
     .back-btn {
       position: fixed;
       top: 24px; left: 28px;
-      background: none;
-      border: 1px solid rgba(92,48,16,0.33);
-      color: #8a6830;
+      background: rgba(10,6,20,0.65);
+      border: 1px solid rgba(196,154,42,0.55);
+      color: #d4aa44;
       font-family: 'Palatino Linotype', Palatino, serif;
       font-size: 13px;
       letter-spacing: 2px;
@@ -46,9 +46,25 @@
       text-decoration: none;
       display: inline-flex;
       align-items: center;
-      transition: border-color .2s, color .2s;
+      backdrop-filter: blur(4px);
+      transition: border-color .2s, color .2s, background .2s;
     }
-    .back-btn:hover { border-color: rgba(196,154,42,0.53); color: #c49a2a; }
+    .back-btn:hover { border-color: rgba(196,154,42,0.9); color: #f0cc66; background: rgba(10,6,20,0.85); }
+
+    /* Footer */
+    .page-footer {
+      display: block;
+      text-align: center;
+      font-family: 'Palatino Linotype', Palatino, serif;
+      font-size: 12px;
+      letter-spacing: 3px;
+      color: #d4aa44;
+      padding: 18px 0 22px;
+      border-top: 1px solid rgba(196,154,42,0.25);
+      margin-top: 32px;
+      white-space: nowrap;
+    }
+
     input, select, textarea { font-family: inherit; }
     .app { display: flex; flex-direction: column; min-height: 100vh; }
 
@@ -589,6 +605,7 @@
 <body>
 <a href="index.html" class="back-btn">✦ VOLVER</a>
 <div id="root"></div>
+<div class="page-footer">✦ creado por mr.tora · 2026 ✦</div>
 
 <script type="text/babel">
 const { useState, useEffect, useCallback, useRef } = React;

@@ -18,9 +18,7 @@
     }
     body {
       background-color: var(--bg);
-      background-image:
-        linear-gradient(rgba(8,6,12,0.55), rgba(8,6,12,0.55)),
-        url('static/wallpaper.png');
+      background-image: url('static/mesadetrabajo.jpeg');
       background-size: cover;
       background-repeat: no-repeat;
       background-attachment: fixed;
@@ -33,14 +31,41 @@
     input, select, textarea { font-family: inherit; }
     .app { display: flex; flex-direction: column; min-height: 100vh; }
 
-    /* Header */
-    .header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 24px; display: flex; align-items: center; gap: 20px; height: 58px; }
-    .header-logo { font-family: 'Cinzel Decorative', 'Palatino Linotype', serif; font-size: 17px; font-weight: 700; color: var(--accent); letter-spacing: 1px; line-height: 1; }
-    .header-logo span { color: var(--text2); font-weight: 400; }
-    .nav { display: flex; gap: 4px; margin-left: auto; }
-    .nav-btn { padding: 7px 16px; border-radius: var(--radius); background: transparent; color: var(--text2); font-size: 14px; font-weight: 500; transition: all .15s; text-decoration: none; display: inline-flex; align-items: center; }
-    .nav-btn:hover { background: var(--surface2); color: var(--text); }
-    .nav-btn.active { background: var(--accent2); color: #fff; }
+    /* Botón volver */
+    .back-btn {
+      position: fixed;
+      top: 24px; right: 28px;
+      background: rgba(10,6,20,0.65);
+      border: 1px solid rgba(196,154,42,0.55);
+      color: #d4aa44;
+      font-family: 'Palatino Linotype', Palatino, serif;
+      font-size: 13px;
+      letter-spacing: 2px;
+      padding: 6px 14px;
+      border-radius: 4px;
+      cursor: pointer;
+      z-index: 9999;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      backdrop-filter: blur(4px);
+      transition: border-color .2s, color .2s, background .2s;
+    }
+    .back-btn:hover { border-color: rgba(196,154,42,0.9); color: #f0cc66; background: rgba(10,6,20,0.85); }
+
+    /* Footer */
+    .page-footer {
+      display: block;
+      text-align: center;
+      font-family: 'Palatino Linotype', Palatino, serif;
+      font-size: 12px;
+      letter-spacing: 3px;
+      color: #d4aa44;
+      padding: 18px 0 22px;
+      border-top: 1px solid rgba(196,154,42,0.25);
+      margin-top: 32px;
+      white-space: nowrap;
+    }
     .main { flex: 1; padding: 28px 24px; max-width: 1400px; margin: 0 auto; width: 100%; }
     .section-title { font-size: 22px; font-weight: 700; color: var(--text); margin-bottom: 4px; }
     .section-sub { color: var(--text2); font-size: 14px; margin-bottom: 24px; }
@@ -335,7 +360,7 @@
     @media print {
       @page { size: A4; margin: 8mm; }
       body { background: white; }
-      .header, .nav, .form-panel, .preview-label, .print-hint, .btn-row, .section-title, .section-sub { display: none !important; }
+      .back-btn, .form-panel, .preview-label, .print-hint, .btn-row, .section-title, .section-sub { display: none !important; }
       .editor-layout { grid-template-columns: 1fr; }
       /* Grilla 3×3 — 9 cartas por hoja A4 */
       .preview-panel { display: grid !important; grid-template-columns: repeat(3, 63mm); gap: 3mm; justify-content: center; align-items: start; }
@@ -361,10 +386,343 @@
       .card-namebar { background: transparent !important; }
       .card-typebar { background: transparent !important; }
     }
+
+    /* ═══ COLECCIÓN PROXY MODAL ═══ */
+    .proxy-modal-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,.88);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 300; padding: 16px;
+    }
+    .proxy-modal {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 14px; width: 100%; max-width: 920px;
+      max-height: 90vh; display: flex; flex-direction: column; overflow: hidden;
+    }
+    .proxy-modal-header {
+      padding: 16px 20px; border-bottom: 1px solid var(--border);
+      display: flex; justify-content: space-between; align-items: center; flex-shrink: 0;
+    }
+    .proxy-modal-header h3 { font-size: 16px; font-weight: 700; font-family: 'Cinzel Decorative', 'Palatino Linotype', serif; }
+    .proxy-modal-body { flex: 1; overflow-y: auto; padding: 20px; }
+
+    /* Grid de cartas */
+    .proxy-coll-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(148px,1fr)); gap: 18px; }
+    .proxy-coll-card { display: flex; flex-direction: column; gap: 6px; }
+    .proxy-coll-card:hover .proxy-coll-img-wrap { transform: translateY(-4px); }
+    .proxy-coll-img-wrap {
+      position: relative; border-radius: 9px; overflow: hidden;
+      cursor: default; transition: transform .15s;
+    }
+    .proxy-coll-img {
+      width: 100%; aspect-ratio: 244/341; object-fit: cover;
+      display: block; border-radius: 9px;
+      box-shadow: 0 4px 18px rgba(0,0,0,.6);
+    }
+    /* Foil shimmer */
+    @keyframes proxyFoilMove { 0%{background-position:0% 50%} 50%{background-position:100% 50%} 100%{background-position:0% 50%} }
+    @keyframes proxyFoilShine { 0%{background-position:200% 50%} 100%{background-position:-200% 50%} }
+    .proxy-foil-layer {
+      position: absolute; inset: 0; pointer-events: none; border-radius: inherit;
+      background: linear-gradient(115deg,
+        transparent 0%, rgba(255,20,147,.28) 12%, rgba(0,200,255,.25) 26%,
+        rgba(255,200,0,.22) 42%, rgba(60,220,80,.22) 58%,
+        rgba(180,0,255,.26) 74%, rgba(255,80,0,.2) 87%, transparent 100%);
+      background-size: 300% 300%;
+      animation: proxyFoilMove 4s ease-in-out infinite;
+      mix-blend-mode: color-dodge; opacity: .85;
+    }
+    .proxy-foil-shine {
+      position: absolute; inset: 0; pointer-events: none; border-radius: inherit;
+      background: repeating-linear-gradient(
+        -45deg,
+        transparent 0px, transparent 8px,
+        rgba(255,255,255,.04) 8px, rgba(255,255,255,.04) 10px
+      );
+      background-size: 400% 100%;
+      animation: proxyFoilShine 6s linear infinite;
+      mix-blend-mode: screen;
+    }
+    /* Badges */
+    .proxy-badge-proxy {
+      position: absolute; top: 6px; right: 6px;
+      background: rgba(139,92,246,.88); color: #fff;
+      font-size: 8px; font-weight: 800; padding: 2px 6px;
+      border-radius: 8px; text-transform: uppercase; letter-spacing: .3px;
+    }
+    .proxy-badge-set {
+      position: absolute; bottom: 6px; left: 6px;
+      background: rgba(0,0,0,.78); color: #ccc;
+      font-size: 8.5px; font-weight: 700; padding: 2px 6px;
+      border-radius: 8px; text-transform: uppercase; letter-spacing: .3px;
+    }
+    .proxy-badge-rarity {
+      position: absolute; bottom: 6px; right: 6px;
+      background: rgba(0,0,0,.78); font-size: 10px;
+      font-weight: 800; padding: 2px 6px; border-radius: 8px;
+    }
+    .proxy-coll-name { font-size: 12px; font-weight: 600; text-align: center; line-height: 1.3; color: var(--text); }
+    .proxy-coll-meta { font-size: 10px; color: var(--text2); text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .proxy-coll-actions { display: flex; gap: 4px; justify-content: center; }
+    .proxy-icon-btn {
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 5px; width: 28px; height: 28px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 13px; transition: all .12s; cursor: pointer; color: #fff;
+      text-decoration: none;
+    }
+    .proxy-icon-btn:hover { border-color: var(--accent); }
+    .proxy-icon-btn.danger:hover { border-color: var(--danger); }
+
+    /* Stats bar del modal */
+    .proxy-stats {
+      display: flex; gap: 16px; flex-wrap: wrap;
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 10px; padding: 10px 16px; margin-bottom: 16px;
+    }
+    .proxy-stat { display: flex; flex-direction: column; gap: 1px; }
+    .proxy-stat-value { font-size: 20px; font-weight: 700; color: var(--accent); }
+    .proxy-stat-label { font-size: 11px; color: var(--text2); }
+
+  /* ═══════════════════════════════════════════════════════
+     MESA DE INVOCACIÓN — Tema Arcano
+     ═══════════════════════════════════════════════════════ */
+
+  /* ── Títulos de sección ── */
+  .section-title {
+    font-family: 'Cinzel Decorative', 'Palatino Linotype', serif !important;
+    letter-spacing: 2px !important;
+    color: var(--accent) !important;
+    text-shadow: 0 0 20px rgba(196,154,42,.35) !important;
+  }
+  .section-sub {
+    font-style: italic;
+    letter-spacing: .5px;
+    color: rgba(196,154,42,.55) !important;
+  }
+
+  /* ── PERGAMINO (Form Panel) ── */
+  .form-panel {
+    /* Sobreescribir variables del tema oscuro */
+    --text:   #1a0c04;
+    --text2:  #5c3010;
+    --surface: #f8edd8;
+    --surface2: #f0e2c0;
+    --border: rgba(105,60,18,.4);
+    --accent: #7a3e10;
+    --accent2: #5533aa;
+    --danger: #aa2010;
+
+    background:
+      radial-gradient(ellipse at 8% 96%, rgba(160,90,20,.18) 0%, transparent 48%),
+      radial-gradient(ellipse at 93% 4%,  rgba(180,110,30,.14) 0%, transparent 44%),
+      repeating-linear-gradient(transparent, transparent 31px, rgba(140,80,20,.065) 31px, rgba(140,80,20,.065) 32px),
+      linear-gradient(165deg, #f9f2e2 0%, #f2e7cc 25%, #ead9b4 60%, #f5ecd6 100%);
+    border: 2px solid #7a5020 !important;
+    border-radius: 3px 3px 8px 8px !important;
+    box-shadow:
+      inset 0 0 80px rgba(140,80,15,.13),
+      inset 0 0 0 1px rgba(210,170,80,.22),
+      0 0 30px rgba(0,0,0,.8),
+      0 8px 40px rgba(0,0,0,.6) !important;
+    scrollbar-color: rgba(120,70,20,.5) transparent !important;
+  }
+
+  /* Banda ornamental superior del pergamino (pseudo-flex-item) */
+  .form-panel > .parchment-header {
+    flex-shrink: 0;
+    text-align: center;
+    font-size: 11px;
+    color: rgba(120,70,20,.45);
+    letter-spacing: 3px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid rgba(120,70,20,.2);
+    margin-bottom: 2px;
+    font-family: 'Cinzel Decorative', serif;
+  }
+
+  /* Labels & texto en pergamino */
+  .form-panel h3,
+  .form-panel .form-row label,
+  .form-panel .frame-custom-label,
+  .form-panel .frame-opt-label,
+  .form-panel .art-upload-text,
+  .form-panel .slider-label span,
+  .form-panel .slider-value,
+  .form-panel .print-hint {
+    color: var(--text2) !important;
+  }
+  .form-panel h3 {
+    font-family: 'Cinzel Decorative', 'Palatino Linotype', serif !important;
+  }
+
+  /* Inputs en pergamino */
+  .form-panel .form-row input,
+  .form-panel .form-row select,
+  .form-panel .form-row textarea {
+    background: rgba(255,251,236,.9) !important;
+    border-color: rgba(110,60,15,.38) !important;
+    color: #1a0c04 !important;
+    box-shadow: inset 0 1px 3px rgba(0,0,0,.08) !important;
+  }
+  .form-panel .form-row input:focus,
+  .form-panel .form-row select:focus,
+  .form-panel .form-row textarea:focus {
+    border-color: rgba(85,51,170,.6) !important;
+    box-shadow: 0 0 0 2px rgba(85,51,170,.15), inset 0 1px 3px rgba(0,0,0,.08) !important;
+    outline: none !important;
+  }
+  .form-panel .form-row select option { background: #f5e9cc; color: #1a0c04; }
+
+  /* Botones en pergamino */
+  .form-panel .btn-secondary,
+  .form-panel .textsize-btn,
+  .form-panel .frame-add-btn {
+    background: rgba(255,248,228,.88) !important;
+    border-color: rgba(110,60,15,.38) !important;
+    color: #3a1a06 !important;
+  }
+  .form-panel .btn-secondary:hover,
+  .form-panel .textsize-btn:hover,
+  .form-panel .frame-add-btn:hover {
+    border-color: rgba(85,51,170,.5) !important;
+    background: rgba(240,230,200,.95) !important;
+  }
+  .form-panel .textsize-btn.active {
+    background: rgba(85,51,170,.18) !important;
+    border-color: rgba(85,51,170,.6) !important;
+    color: #3322aa !important;
+  }
+
+  /* Frames, sym-toolbar, art-upload */
+  .form-panel .frame-opt {
+    background: rgba(250,242,220,.9) !important;
+    border-color: rgba(110,60,15,.3) !important;
+  }
+  .form-panel .frame-opt.selected {
+    background: rgba(85,51,170,.12) !important;
+    border-color: rgba(85,51,170,.6) !important;
+  }
+  .form-panel .art-upload-area {
+    background: rgba(255,251,235,.7) !important;
+    border-color: rgba(110,60,15,.35) !important;
+  }
+  .form-panel .sym-toolbar {
+    background: rgba(245,236,208,.95) !important;
+    border-color: rgba(110,60,15,.32) !important;
+  }
+  .form-panel .sym-btn {
+    background: rgba(255,251,235,.9) !important;
+    border-color: rgba(110,60,15,.28) !important;
+    color: #3a1a06 !important;
+  }
+  .form-panel .sym-btn:hover { border-color: rgba(85,51,170,.5) !important; }
+  .form-panel .rarity-btn { background: rgba(250,240,218,.9) !important; }
+
+  /* Scrollbar pergamino */
+  .form-panel::-webkit-scrollbar-thumb {
+    background: rgba(120,68,18,.45) !important;
+    border-radius: 4px;
+  }
+  .form-panel::-webkit-scrollbar-track { background: rgba(200,160,80,.08) !important; }
+
+  /* ── ALTAR DE INVOCACIÓN ── */
+  .altar-stage {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 52px 24px 36px;
+    border-radius: 16px;
+    background: transparent;
+    border: 1px solid rgba(80,50,120,.35);
+    overflow: hidden;
+  }
+
+  /* Anillos de runas — elipses que envuelven la carta */
+  .altar-ring {
+    position: absolute;
+    top: 50%; left: 50%;
+    border-radius: 50%;
+    pointer-events: none;
+  }
+  .altar-ring-1 {
+    width: 440px; height: 590px;
+    border: 1px solid rgba(196,154,42,.18);
+    animation: rotateCW 90s linear infinite;
+    transform: translate(-50%,-50%);
+  }
+  .altar-ring-2 {
+    width: 370px; height: 510px;
+    border: 1px dashed rgba(139,92,246,.2);
+    animation: rotateCCW 62s linear infinite;
+    transform: translate(-50%,-50%);
+  }
+  .altar-ring-3 {
+    width: 300px; height: 430px;
+    border: 1px solid rgba(196,154,42,.11);
+    animation: rotateCW 40s linear infinite;
+    transform: translate(-50%,-50%);
+  }
+
+  /* Joyas en los anillos */
+  .altar-ring-1::before, .altar-ring-1::after,
+  .altar-ring-2::before, .altar-ring-2::after {
+    content: '✦';
+    position: absolute;
+    font-size: 8px;
+    color: rgba(196,154,42,.55);
+    left: 50%; transform: translateX(-50%);
+  }
+  .altar-ring-1::before { top: -6px; }
+  .altar-ring-1::after  { bottom: -6px; }
+  .altar-ring-2::before { top: -6px; }
+  .altar-ring-2::after  { bottom: -6px; }
+
+  @keyframes rotateCW  { from { transform: translate(-50%,-50%) rotate(0deg); }   to { transform: translate(-50%,-50%) rotate(360deg); } }
+  @keyframes rotateCCW { from { transform: translate(-50%,-50%) rotate(0deg); }   to { transform: translate(-50%,-50%) rotate(-360deg); } }
+
+  /* Glow bajo la carta */
+  .altar-card-glow {
+    position: absolute;
+    width: 280px; height: 44px;
+    background: radial-gradient(ellipse, rgba(139,92,246,.45) 0%, transparent 70%);
+    top: calc(50% + 246px);
+    left: 50%; transform: translateX(-50%);
+    filter: blur(10px);
+    pointer-events: none;
+    animation: glowPulse 3.5s ease-in-out infinite;
+  }
+  @keyframes glowPulse {
+    0%, 100% { opacity: .45; }
+    50%       { opacity: .85; }
+  }
+
+  /* Etiqueta de invocación */
+  .altar-invocation-label {
+    position: absolute;
+    top: 12px; left: 50%; transform: translateX(-50%);
+    font-family: 'Cinzel Decorative', serif;
+    font-size: 8.5px;
+    color: rgba(196,154,42,.38);
+    letter-spacing: 5px;
+    text-transform: uppercase;
+    white-space: nowrap;
+    pointer-events: none;
+  }
+
+  /* Print: ocultar decoraciones del altar */
+  @media print {
+    .altar-stage { padding: 0 !important; background: transparent !important; border: none !important; overflow: visible !important; }
+    .altar-ring, .altar-aura, .altar-candle, .altar-invocation-label, .altar-card-glow { display: none !important; }
+  }
+
   </style>
 </head>
 <body>
+<a href="index.html" class="back-btn">✦ VOLVER</a>
 <div id="root"></div>
+<div class="page-footer">✦ creado por mr.tora · 2026 ✦</div>
 
 <script type="text/babel">
 const { useState, useEffect, useCallback, useRef } = React;
@@ -407,14 +765,24 @@ function parseMana(cost) {
   });
 }
 
-/* Componente que auto-carga su símbolo como data URL para que el PNG/clone lo capture */
+/* Componente que auto-carga su símbolo como data URL para que el PNG/clone lo capture.
+   IMPORTANTE: no usamos la URL externa como src inicial — eso causaba que el navegador
+   lanzara peticiones de imagen que mantenían el spinner de carga activo indefinidamente.
+   Solo asignamos src una vez que tenemos el data URL listo. */
 function ManaSymImg({ sym, size, style, onErr }) {
   const url = `${SCRYFALL_SYM}${sym}.svg`;
-  const [src, setSrc] = React.useState(SYM_DATA_CACHE[sym] || url);
+  // Iniciar solo con datos ya cacheados (data URL), nunca con la URL externa
+  const cached = SYM_DATA_CACHE[sym];
+  const [src, setSrc] = React.useState(cached && cached !== url ? cached : null);
   React.useEffect(() => {
-    if (SYM_DATA_CACHE[sym] && SYM_DATA_CACHE[sym] !== url) { setSrc(SYM_DATA_CACHE[sym]); return; }
+    if (SYM_DATA_CACHE[sym] && SYM_DATA_CACHE[sym] !== url) {
+      setSrc(SYM_DATA_CACHE[sym]);
+      return;
+    }
     fetchSymDataUrl(sym).then(dataUrl => setSrc(dataUrl));
   }, [sym]);
+  // Mientras carga: espacio reservado del mismo tamaño para evitar layout shift
+  if (!src) return <span style={{display:'inline-block', width:size, height:size, verticalAlign:'middle'}} />;
   return (
     <img src={src} width={size} height={size} alt={sym}
       style={style}
@@ -762,6 +1130,636 @@ function SliderRow({ label, value, min, max, onChange, unit='px', step=1 }) {
   );
 }
 
+/* ─── PROXY COLLECTION (localStorage) ─── */
+const PROXY_COLL_KEY = 'proxy_collection_v1';
+
+function loadProxyColl() {
+  try { return JSON.parse(localStorage.getItem(PROXY_COLL_KEY) || '[]'); }
+  catch { return []; }
+}
+function saveProxyColl(coll) {
+  try {
+    localStorage.setItem(PROXY_COLL_KEY, JSON.stringify(coll));
+  } catch(e) {
+    console.warn('proxy_collection: localStorage lleno, no se pudo guardar.', e);
+  }
+}
+
+const RARITY_COLORS = {
+  common: '#aaaaaa', uncommon: '#90b8c8', rare: '#c8a820', mythic: '#e06820',
+};
+const RARITY_SYMS = {
+  common: '●', uncommon: '◆', rare: '★', mythic: '✦',
+};
+
+/* Recorta/redimensiona una imagen al ratio exacto de carta (244:341) usando canvas */
+function cropToCardRatio(src) {
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => {
+      const TARGET_W = 732; // 244×3 (misma escala que html2canvas scale:3)
+      const TARGET_H = 1023; // 341×3
+      const srcRatio = img.naturalWidth / img.naturalHeight;
+      const tgtRatio = TARGET_W / TARGET_H;
+      let sx, sy, sw, sh;
+      if (srcRatio > tgtRatio) {
+        // imagen más ancha: recortar laterales
+        sh = img.naturalHeight;
+        sw = sh * tgtRatio;
+        sy = 0;
+        sx = (img.naturalWidth - sw) / 2;
+      } else {
+        // imagen más alta: recortar arriba/abajo
+        sw = img.naturalWidth;
+        sh = sw / tgtRatio;
+        sx = 0;
+        sy = (img.naturalHeight - sh) / 2;
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width  = TARGET_W;
+      canvas.height = TARGET_H;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, sx, sy, sw, sh, 0, 0, TARGET_W, TARGET_H);
+      // JPEG al 88% — ~10× más pequeño que PNG para fotos, suficiente calidad para cartas
+      resolve(canvas.toDataURL('image/jpeg', 0.88));
+    };
+    img.onerror = () => resolve(src);
+    img.src = src;
+  });
+}
+
+function ProxyCollectionModal({ collection, onClose, onRemove, onClear, onAdd }) {
+  const rarityCount = collection.reduce((acc, c) => {
+    acc[c.rarity] = (acc[c.rarity] || 0) + 1; return acc;
+  }, {});
+
+  /* ── estado del sub-panel de importación ── */
+  const [importing, setImporting] = useState(false);
+  const [importPreview, setImportPreview] = useState(null);
+  const [importName, setImportName] = useState('');
+  const [importRarity, setImportRarity] = useState('common');
+  const [importSet, setImportSet] = useState('');
+  const [processing, setProcessing] = useState(false);
+  const importInputRef = useRef();
+
+  /* ── búsqueda de carta original ── */
+  const [origQuery, setOrigQuery]     = useState('');
+  const [origResults, setOrigResults] = useState([]);
+  const [origLoading, setOrigLoading] = useState(false);
+  const [origSelected, setOrigSelected] = useState(null); // objeto Scryfall
+  const [dropdownRect, setDropdownRect] = useState(null); // posición fixed del dropdown
+  const origTimer = useRef();
+  const origInputRef = useRef();
+
+  const searchOrig = async q => {
+    if (!q || q.length < 2) { setOrigResults([]); return; }
+    setOrigLoading(true);
+    try {
+      const r = await fetch(`https://api.scryfall.com/cards/search?q=${encodeURIComponent(q)}&order=name&unique=cards`);
+      const d = await r.json();
+      setOrigResults(d.data || []);
+    } catch { setOrigResults([]); } finally { setOrigLoading(false); }
+  };
+
+  const handleOrigQuery = e => {
+    const v = e.target.value;
+    setOrigQuery(v);
+    setOrigSelected(null);
+    // Calcular posición del input para el dropdown fixed
+    if (origInputRef.current) {
+      const r = origInputRef.current.getBoundingClientRect();
+      setDropdownRect({ top: r.bottom + 4, left: r.left, width: r.width });
+    }
+    clearTimeout(origTimer.current);
+    origTimer.current = setTimeout(() => searchOrig(v), 380);
+  };
+
+  const selectOrig = card => {
+    setOrigSelected(card);
+    setOrigQuery(card.name);
+    setOrigResults([]);
+    setDropdownRect(null);
+    // Auto-rellenar nombre si está vacío
+    if (!importName.trim()) setImportName(card.name);
+    // Auto-rellenar rareza
+    const rMap = { common:'common', uncommon:'uncommon', rare:'rare', mythic:'mythic' };
+    if (rMap[card.rarity]) setImportRarity(rMap[card.rarity]);
+    // Auto-rellenar set
+    if (!importSet.trim()) setImportSet(card.set.toUpperCase());
+  };
+
+  const handleImportFile = async e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async ev => {
+      const cropped = await cropToCardRatio(ev.target.result);
+      setImportPreview(cropped);
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  };
+
+  const resetImport = () => {
+    setImporting(false);
+    setImportPreview(null);
+    setImportName('');
+    setImportSet('');
+    setImportRarity('common');
+    setOrigQuery('');
+    setOrigResults([]);
+    setOrigSelected(null);
+    setDropdownRect(null);
+  };
+
+  const confirmImport = async () => {
+    if (!importPreview) return;
+    setProcessing(true);
+    const origImg = origSelected?.image_uris?.normal
+      || origSelected?.card_faces?.[0]?.image_uris?.normal || null;
+    const item = {
+      id: Date.now(),
+      name: importName.trim() || (origSelected?.name) || 'Carta importada',
+      typeLine: origSelected?.type_line || '',
+      rarity: importRarity,
+      setCode: importSet.trim(),
+      addedAt: Date.now(),
+      img: importPreview,
+      isImported: true,
+      origCard: origSelected ? {
+        name:      origSelected.name,
+        imgSmall:  origSelected.image_uris?.small  || origSelected.card_faces?.[0]?.image_uris?.small  || null,
+        imgNormal: origImg,
+        typeLine:  origSelected.type_line || '',
+        manaCost:  origSelected.mana_cost || origSelected.card_faces?.[0]?.mana_cost || '',
+        setName:   origSelected.set_name  || '',
+        setCode:   origSelected.set?.toUpperCase() || '',
+        rarity:    origSelected.rarity    || '',
+        scryfallId: origSelected.id,
+      } : null,
+    };
+    onAdd(item);
+    resetImport();
+    setProcessing(false);
+  };
+
+  /* ── hover state para mostrar carta original ── */
+  const [hoveredId, setHoveredId] = useState(null);
+
+  const inputSt = {
+    background:'var(--surface)', border:'1px solid var(--border)',
+    borderRadius:'6px', padding:'7px 10px', color:'var(--text)',
+    fontSize:'13px', width:'100%',
+  };
+
+  const fallbackOrigImg = "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='100' height='140'><rect width='100' height='140' rx='6' fill='%23333'/><text x='50' y='70' text-anchor='middle' fill='%23666' font-size='10'>Sin imagen</text></svg>";
+
+  return (
+    <div className="proxy-modal-overlay" onClick={onClose}>
+      <div className="proxy-modal" onClick={e => e.stopPropagation()}>
+
+        {/* ── Header ── */}
+        <div className="proxy-modal-header">
+          <h3>📚 Colección de Proxies</h3>
+          <div style={{display:'flex',alignItems:'center',gap:'8px',flexWrap:'wrap'}}>
+            <button
+              onClick={() => { setImporting(v => !v); }}
+              style={{
+                fontSize:'12px', padding:'5px 12px', borderRadius:'6px', fontWeight:600,
+                border:`1px solid ${importing ? 'var(--accent)' : 'var(--accent2)'}`,
+                background: importing ? 'rgba(196,154,42,.12)' : 'rgba(139,92,246,.12)',
+                color: importing ? 'var(--accent)' : 'var(--accent2)',
+                cursor:'pointer', display:'flex', alignItems:'center', gap:'5px',
+              }}
+              title="Importar una imagen ya terminada al ratio de carta"
+            >{importing ? '✕ Cerrar importador' : '📷 Importar imagen'}</button>
+            <input type="file" accept="image/*" ref={importInputRef}
+              onChange={handleImportFile} style={{display:'none'}} />
+
+            {collection.length > 0 && (
+              <button onClick={onClear} style={{
+                fontSize:'11px', padding:'4px 10px', borderRadius:'6px',
+                border:'1px solid var(--danger)', background:'rgba(224,85,85,.1)',
+                color:'var(--danger)', cursor:'pointer', fontWeight:600,
+              }}>🗑 Vaciar</button>
+            )}
+            <span style={{fontSize:'12px',color:'var(--text2)'}}>{collection.length} carta{collection.length !== 1 ? 's' : ''}</span>
+            <button onClick={onClose} style={{
+              background:'var(--surface2)', border:'1px solid var(--border)',
+              borderRadius:'5px', width:'28px', height:'28px',
+              display:'flex', alignItems:'center', justifyContent:'center',
+              fontSize:'13px', cursor:'pointer', color:'var(--text)',
+            }}>✕</button>
+          </div>
+        </div>
+
+        {/* ── Sub-panel de importación ── */}
+        {importing && (
+          <div style={{
+            padding:'16px 20px', borderBottom:'1px solid var(--border)',
+            background:'rgba(139,92,246,.05)',
+            display:'flex', gap:'20px', alignItems:'flex-start', flexWrap:'wrap',
+          }}>
+
+            {/* Columna izquierda: previews */}
+            <div style={{display:'flex',gap:'12px',flexShrink:0}}>
+              {/* Preview proxy */}
+              <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:'5px'}}>
+                <span style={{fontSize:'10px',color:'var(--text2)',fontWeight:700,textTransform:'uppercase',letterSpacing:'.4px'}}>Tu proxy</span>
+                {importPreview ? (
+                  <div style={{width:'88px',borderRadius:'8px',overflow:'hidden',
+                    boxShadow:'0 4px 14px rgba(0,0,0,.6)',border:'2px solid var(--accent2)'}}>
+                    <img src={importPreview} alt="proxy" style={{width:'100%',display:'block'}} />
+                  </div>
+                ) : (
+                  <div onClick={() => importInputRef.current?.click()} style={{
+                    width:'88px', aspectRatio:'244/341', borderRadius:'8px',
+                    border:'2px dashed var(--accent2)', background:'rgba(139,92,246,.08)',
+                    display:'flex', flexDirection:'column', alignItems:'center',
+                    justifyContent:'center', gap:'6px', cursor:'pointer',
+                    color:'var(--accent2)', fontSize:'11px', fontWeight:600, textAlign:'center', padding:'8px',
+                  }}>
+                    <span style={{fontSize:'22px'}}>📷</span>
+                    Subir imagen
+                  </div>
+                )}
+                {importPreview && (
+                  <button onClick={() => importInputRef.current?.click()} style={{
+                    padding:'3px 8px', fontSize:'10px', borderRadius:'5px', cursor:'pointer',
+                    border:'1px solid var(--border)', background:'var(--surface2)', color:'var(--text2)',
+                  }}>🔄 Cambiar</button>
+                )}
+              </div>
+
+              {/* Preview carta original */}
+              <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:'5px'}}>
+                <span style={{fontSize:'10px',color:'var(--text2)',fontWeight:700,textTransform:'uppercase',letterSpacing:'.4px'}}>Original</span>
+                {origSelected ? (
+                  <div style={{width:'88px',borderRadius:'8px',overflow:'hidden',
+                    boxShadow:'0 4px 14px rgba(0,0,0,.6)',border:'2px solid var(--accent)'}}>
+                    <img
+                      src={origSelected.image_uris?.normal || origSelected.card_faces?.[0]?.image_uris?.normal || fallbackOrigImg}
+                      alt={origSelected.name}
+                      style={{width:'100%',display:'block'}}
+                      onError={e=>{e.target.src=fallbackOrigImg;}}
+                    />
+                  </div>
+                ) : (
+                  <div style={{
+                    width:'88px', aspectRatio:'244/341', borderRadius:'8px',
+                    border:'2px dashed var(--border)', background:'rgba(255,255,255,.03)',
+                    display:'flex', flexDirection:'column', alignItems:'center',
+                    justifyContent:'center', gap:'5px',
+                    color:'var(--text2)', fontSize:'10px', textAlign:'center', padding:'8px',
+                  }}>
+                    <span style={{fontSize:'18px'}}>🔍</span>
+                    Busca la carta original
+                  </div>
+                )}
+                {origSelected && (
+                  <button onClick={()=>{ setOrigSelected(null); setOrigQuery(''); }} style={{
+                    padding:'3px 8px', fontSize:'10px', borderRadius:'5px', cursor:'pointer',
+                    border:'1px solid var(--border)', background:'var(--surface2)', color:'var(--text2)',
+                  }}>✕ Quitar</button>
+                )}
+              </div>
+            </div>
+
+            {/* Columna derecha: formulario */}
+            <div style={{flex:1, minWidth:'220px', display:'flex', flexDirection:'column', gap:'10px'}}>
+              <div style={{fontSize:'12px', color:'var(--accent2)', fontWeight:700,
+                textTransform:'uppercase', letterSpacing:'.5px'}}>
+                Importar imagen completa
+              </div>
+              <div style={{fontSize:'11px', color:'var(--text2)', lineHeight:1.5}}>
+                La imagen se recortará al ratio de carta (63:88). Opcionalmente, busca la carta original para enlazarla.
+              </div>
+
+              {/* Búsqueda carta original */}
+              <div style={{display:'flex',flexDirection:'column',gap:'4px',position:'relative'}}>
+                <label style={{fontSize:'11px',color:'var(--accent)',fontWeight:700,textTransform:'uppercase',letterSpacing:'.4px'}}>
+                  🔍 Carta original (Scryfall)
+                </label>
+                <div style={{position:'relative'}}>
+                  <input
+                    ref={origInputRef}
+                    style={{...inputSt, paddingRight: origLoading ? '32px' : undefined}}
+                    placeholder="Busca por nombre… ej: Black Lotus"
+                    value={origQuery}
+                    onChange={handleOrigQuery}
+                    onFocus={() => {
+                      if (origInputRef.current) {
+                        const r = origInputRef.current.getBoundingClientRect();
+                        setDropdownRect({ top: r.bottom + 4, left: r.left, width: r.width });
+                      }
+                    }}
+                  />
+                  {origLoading && (
+                    <span className="spinner" style={{
+                      position:'absolute', right:'10px', top:'50%',
+                      transform:'translateY(-50%)', width:'14px', height:'14px',
+                    }}/>
+                  )}
+                </div>
+                {origSelected && (
+                  <div style={{
+                    fontSize:'11px', color:'var(--accent)', padding:'6px 10px',
+                    background:'rgba(196,154,42,.1)', borderRadius:'7px',
+                    border:'1px solid rgba(196,154,42,.25)',
+                    display:'flex', alignItems:'center', gap:'6px', flexWrap:'wrap',
+                  }}>
+                    <span>✅</span>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontWeight:700,color:'var(--text)'}}>{origSelected.name}</div>
+                      <div style={{color:'var(--text2)',marginTop:'1px'}}>
+                        {origSelected.type_line} · {origSelected.set_name}
+                      </div>
+                    </div>
+                  </div>
+                )}
+                {/* Dropdown con position:fixed para escapar del overflow:hidden del modal */}
+                {origResults.length > 0 && dropdownRect && (
+                  <div style={{
+                    position:'fixed',
+                    top: dropdownRect.top,
+                    left: dropdownRect.left,
+                    width: dropdownRect.width,
+                    zIndex: 9999,
+                    background:'var(--surface)',
+                    border:'1px solid var(--border)',
+                    borderRadius:'10px',
+                    boxShadow:'0 8px 32px rgba(0,0,0,.75)',
+                    maxHeight:'320px',
+                    overflowY:'auto',
+                    scrollbarWidth:'thin',
+                    scrollbarColor:'var(--border) transparent',
+                  }}>
+                    {/* Header del dropdown */}
+                    <div style={{
+                      padding:'7px 12px',
+                      borderBottom:'1px solid var(--border)',
+                      fontSize:'10px', fontWeight:700, color:'var(--text2)',
+                      textTransform:'uppercase', letterSpacing:'.5px',
+                      display:'flex', justifyContent:'space-between', alignItems:'center',
+                      position:'sticky', top:0, background:'var(--surface)', zIndex:1,
+                    }}>
+                      <span>{origResults.length} resultado{origResults.length !== 1 ? 's' : ''}</span>
+                      <button
+                        onMouseDown={e => { e.preventDefault(); setOrigResults([]); setDropdownRect(null); }}
+                        style={{
+                          background:'none', border:'none', color:'var(--text2)',
+                          cursor:'pointer', fontSize:'12px', padding:'0 2px', lineHeight:1,
+                        }}
+                      >✕</button>
+                    </div>
+                    {origResults.map((card, idx) => {
+                      const imgS = card.image_uris?.small || card.card_faces?.[0]?.image_uris?.small;
+                      const rarityColor = RARITY_COLORS[card.rarity] || '#aaa';
+                      const raritySym  = RARITY_SYMS[card.rarity]   || '●';
+                      return (
+                        <div key={card.id}
+                          onMouseDown={e => { e.preventDefault(); selectOrig(card); }}
+                          style={{
+                            display:'flex', alignItems:'center', gap:'12px',
+                            padding:'10px 14px', cursor:'pointer',
+                            borderBottom: idx < origResults.length - 1 ? '1px solid var(--border)' : 'none',
+                            transition:'background .1s',
+                          }}
+                          onMouseEnter={e => e.currentTarget.style.background = 'var(--surface2)'}
+                          onMouseLeave={e => e.currentTarget.style.background = ''}
+                        >
+                          <img src={imgS || fallbackOrigImg} alt={card.name}
+                            style={{
+                              width:'36px', height:'50px', objectFit:'cover',
+                              borderRadius:'5px', flexShrink:0,
+                              boxShadow:'0 2px 8px rgba(0,0,0,.5)',
+                            }}
+                            onError={e => { e.target.src = fallbackOrigImg; }} />
+                          <div style={{flex:1, minWidth:0}}>
+                            <div style={{
+                              fontSize:'13px', fontWeight:700, color:'var(--text)',
+                              whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis',
+                              marginBottom:'3px',
+                            }}>
+                              {card.name}
+                            </div>
+                            <div style={{fontSize:'11px', color:'var(--text2)', marginBottom:'2px',
+                              whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>
+                              {card.type_line}
+                            </div>
+                            <div style={{display:'flex', alignItems:'center', gap:'6px', flexWrap:'wrap'}}>
+                              <span style={{
+                                fontSize:'10px', fontWeight:700, color:rarityColor,
+                              }}>{raritySym} {card.rarity}</span>
+                              <span style={{fontSize:'10px', color:'var(--text2)'}}>·</span>
+                              <span style={{fontSize:'10px', color:'var(--text2)',
+                                whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>
+                                {card.set_name}
+                              </span>
+                            </div>
+                          </div>
+                          {card.mana_cost && (
+                            <div style={{flexShrink:0, fontSize:'11px', color:'var(--text2)'}}>
+                              {card.mana_cost}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Nombre proxy */}
+              <div style={{display:'flex',flexDirection:'column',gap:'4px'}}>
+                <label style={{fontSize:'11px',color:'var(--text2)',fontWeight:600,textTransform:'uppercase',letterSpacing:'.4px'}}>
+                  Nombre del proxy (opcional)
+                </label>
+                <input style={inputSt} placeholder="Se autocompletará con la carta original"
+                  value={importName} onChange={e => setImportName(e.target.value)} />
+              </div>
+
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'8px'}}>
+                <div style={{display:'flex',flexDirection:'column',gap:'4px'}}>
+                  <label style={{fontSize:'11px',color:'var(--text2)',fontWeight:600,textTransform:'uppercase',letterSpacing:'.4px'}}>Rareza</label>
+                  <select style={{...inputSt, padding:'6px 8px'}}
+                    value={importRarity} onChange={e => setImportRarity(e.target.value)}>
+                    {Object.entries(RARITY_SYMS).map(([id, sym]) => (
+                      <option key={id} value={id} style={{background:'#1a1a24'}}>
+                        {sym} {id.charAt(0).toUpperCase()+id.slice(1)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div style={{display:'flex',flexDirection:'column',gap:'4px'}}>
+                  <label style={{fontSize:'11px',color:'var(--text2)',fontWeight:600,textTransform:'uppercase',letterSpacing:'.4px'}}>Set</label>
+                  <input style={inputSt} placeholder="Ej: LEA"
+                    value={importSet} onChange={e => setImportSet(e.target.value)} />
+                </div>
+              </div>
+
+              <div style={{display:'flex',gap:'8px',marginTop:'2px'}}>
+                <button onClick={resetImport} style={{
+                  flex:1, padding:'7px', borderRadius:'6px', fontWeight:600,
+                  border:'1px solid var(--border)', background:'var(--surface2)',
+                  color:'var(--text)', cursor:'pointer', fontSize:'13px',
+                }}>Cancelar</button>
+                <button
+                  onClick={confirmImport}
+                  disabled={!importPreview || processing}
+                  style={{
+                    flex:2, padding:'7px', borderRadius:'6px', fontWeight:700,
+                    background: importPreview ? 'var(--accent2)' : 'var(--border)',
+                    color: importPreview ? '#fff' : 'var(--text2)',
+                    border:'none', cursor: importPreview ? 'pointer' : 'not-allowed',
+                    fontSize:'13px', display:'flex', alignItems:'center',
+                    justifyContent:'center', gap:'6px',
+                  }}
+                >
+                  {processing
+                    ? <><span className="spinner" style={{width:'13px',height:'13px'}}/>Procesando…</>
+                    : '✅ Añadir a colección'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Body principal ── */}
+        <div className="proxy-modal-body">
+          {collection.length === 0 && !importing ? (
+            <div style={{textAlign:'center',padding:'60px 20px',color:'var(--text2)'}}>
+              <div style={{fontSize:'48px',marginBottom:'12px'}}>🎨</div>
+              <h3 style={{fontSize:'18px',color:'var(--text)',marginBottom:'8px',
+                fontFamily:"'Cinzel Decorative',serif"}}>Colección vacía</h3>
+              <p style={{fontSize:'14px',lineHeight:1.6}}>
+                Importa una imagen terminada con <b style={{color:'var(--accent2)'}}>📷 Importar imagen</b>.
+              </p>
+            </div>
+          ) : (
+            <>
+              {/* Stats */}
+              {collection.length > 0 && (
+                <div className="proxy-stats">
+                  <div className="proxy-stat">
+                    <span className="proxy-stat-value">{collection.length}</span>
+                    <span className="proxy-stat-label">Cartas</span>
+                  </div>
+                  {Object.entries(rarityCount).map(([r, n]) => (
+                    <div key={r} className="proxy-stat">
+                      <span className="proxy-stat-value" style={{color: RARITY_COLORS[r] || 'var(--accent)'}}>
+                        {RARITY_SYMS[r] || '●'} {n}
+                      </span>
+                      <span className="proxy-stat-label" style={{textTransform:'capitalize'}}>{r}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Grid */}
+              <div className="proxy-coll-grid">
+                {collection.map(item => (
+                  <div key={item.id} className="proxy-coll-card"
+                    onMouseEnter={() => setHoveredId(item.id)}
+                    onMouseLeave={() => setHoveredId(null)}
+                  >
+                    <div className="proxy-coll-img-wrap" style={{position:'relative'}}>
+                      <img className="proxy-coll-img" src={item.img} alt={item.name} />
+                      <div className="proxy-badge-proxy">{item.isImported ? 'IMG' : 'PROXY'}</div>
+                      {item.setCode && (
+                        <div className="proxy-badge-set">{item.setCode.toUpperCase()}</div>
+                      )}
+                      {item.rarity && (
+                        <div className="proxy-badge-rarity"
+                          style={{color: RARITY_COLORS[item.rarity] || '#aaa'}}>
+                          {RARITY_SYMS[item.rarity] || '●'}
+                        </div>
+                      )}
+                      {/* Tooltip carta original al hacer hover */}
+                      {item.origCard && hoveredId === item.id && (
+                        <div style={{
+                          position:'absolute', bottom:'calc(100% + 8px)', left:'50%',
+                          transform:'translateX(-50%)',
+                          background:'var(--surface)', border:'1px solid var(--border)',
+                          borderRadius:'10px', padding:'10px',
+                          boxShadow:'0 8px 28px rgba(0,0,0,.8)',
+                          zIndex:50, width:'160px', pointerEvents:'none',
+                          display:'flex', flexDirection:'column', gap:'7px',
+                        }}>
+                          <div style={{fontSize:'10px',color:'var(--accent)',fontWeight:700,
+                            textTransform:'uppercase',letterSpacing:'.4px'}}>
+                            Carta original
+                          </div>
+                          <img
+                            src={item.origCard.imgNormal || item.origCard.imgSmall || fallbackOrigImg}
+                            alt={item.origCard.name}
+                            style={{width:'100%',borderRadius:'6px',display:'block',
+                              boxShadow:'0 4px 12px rgba(0,0,0,.5)'}}
+                            onError={e=>{e.target.src=fallbackOrigImg;}}
+                          />
+                          <div style={{fontSize:'11px',fontWeight:700,color:'var(--text)',lineHeight:1.3}}>
+                            {item.origCard.name}
+                          </div>
+                          <div style={{fontSize:'10px',color:'var(--text2)',lineHeight:1.4}}>
+                            {item.origCard.typeLine}
+                          </div>
+                          {item.origCard.setName && (
+                            <div style={{fontSize:'10px',color:'var(--text2)'}}>
+                              📦 {item.origCard.setName}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="proxy-coll-name">{item.name || 'Sin nombre'}</div>
+
+                    {/* Referencia a la carta original */}
+                    {item.origCard && (
+                      <div style={{
+                        fontSize:'10px', color:'var(--accent)', textAlign:'center',
+                        display:'flex', alignItems:'center', justifyContent:'center',
+                        gap:'4px', lineHeight:1.3,
+                      }}>
+                        <span>🔗</span>
+                        <span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:'120px'}}>
+                          {item.origCard.name}
+                        </span>
+                      </div>
+                    )}
+
+                    {item.typeLine && !item.origCard && (
+                      <div className="proxy-coll-meta">{item.typeLine}</div>
+                    )}
+
+                    <div className="proxy-coll-actions">
+                      <a className="proxy-icon-btn"
+                        href={item.img}
+                        download={`${item.name || 'proxy'}-proxy.png`}
+                        title="Descargar PNG">⬇️</a>
+                      {item.origCard?.scryfallId && (
+                        <a className="proxy-icon-btn"
+                          href={`https://scryfall.com/card/${item.origCard.scryfallId}`}
+                          target="_blank" rel="noopener noreferrer"
+                          title={`Ver "${item.origCard.name}" en Scryfall`}
+                          style={{fontSize:'11px', fontWeight:700}}>🔍</a>
+                      )}
+                      <button className="proxy-icon-btn danger"
+                        title="Eliminar"
+                        onClick={() => onRemove(item.id)}
+                        style={{color:'var(--danger)'}}>✕</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ─── EDITOR SECTION ─── */
 const defaultCard = {
   name:'', manaCost:'', colors:[], cardType:'Criatura', subtype:'',
@@ -789,6 +1787,8 @@ function EditorSection() {
   const [copies, setCopies] = useState(1);
   const [showSafeZone, setShowSafeZone] = useState(false);
   const [downloading, setDownloading] = useState(false);
+  const [proxyCollection, setProxyCollection] = useState(loadProxyColl);
+  const [showProxyModal, setShowProxyModal] = useState(false);
   const [presets, setPresets] = useState(() => {
     try { return JSON.parse(localStorage.getItem('mtg_presets') || '[]'); } catch { return []; }
   });
@@ -979,17 +1979,44 @@ function EditorSection() {
     }
   };
 
+  const removeFromProxy = (id) => {
+    setProxyCollection(prev => {
+      const updated = prev.filter(c => c.id !== id);
+      saveProxyColl(updated);
+      return updated;
+    });
+  };
+
+  const addToProxyCollection = (item) => {
+    // Usar forma funcional para evitar stale closure sobre proxyCollection
+    setProxyCollection(prev => {
+      const updated = [...prev, item];
+      saveProxyColl(updated);
+      return updated;
+    });
+  };
+
+  const clearProxyCollection = () => {
+    if (!confirm('¿Vaciar toda la colección de proxies?')) return;
+    setProxyCollection([]);
+    saveProxyColl([]);
+  };
+
   const isCreature = /criatura|creature/i.test(card.cardType || '');
   const isPW = /planeswalker/i.test(card.cardType || '');
 
   return (
     <div>
-      <h2 className="section-title">Editor de Cartas Proxy</h2>
-      <p className="section-sub">Diseña tu carta con marcos reales, arte propio y símbolos oficiales</p>
+      <div className="section-title" style={{display:'flex',alignItems:'center',justifyContent:'flex-start',gap:'14px'}}>
+        <img src="static/logo.png" alt="logo" style={{height:'72px',objectFit:'contain'}} />
+        <span>— Proxy Builder</span>
+      </div>
+      <p className="section-sub">Conjura tu carta en el altar de invocación · arte propio · marcos reales · símbolos oficiales</p>
       <div className="editor-layout">
 
         {/* ── FORM ── */}
         <div className="form-panel">
+          <div className="parchment-header">✦ Grimorio del Conjurador ✦</div>
 
           {/* Name + Mana */}
           <div className="form-row">
@@ -1257,7 +2284,7 @@ function EditorSection() {
               {['{W}','{U}','{B}','{R}','{G}','{C}','{S}'].map(s=>(
                 <button key={s} className="sym-btn" onClick={()=>insertSym(s)}
                   style={{display:'flex',alignItems:'center',gap:'2px',padding:'2px 4px'}}>
-                  <img src={`${SCRYFALL_SYM}${s.slice(1,-1)}.svg`} width={11} height={11} style={{verticalAlign:'middle'}} alt={s}/>
+                  <ManaSymImg sym={s.slice(1,-1)} size={11} style={{verticalAlign:'middle'}} />
                 </button>
               ))}
               <div className="sym-sep"/>
@@ -1534,6 +2561,22 @@ function EditorSection() {
               {downloading ? <span className="spinner" style={{width:'14px',height:'14px'}} /> : '⬇️'}
               {downloading ? 'Exportando…' : 'Descargar PNG'}
             </button>
+            <button
+              className="btn btn-secondary"
+              style={{display:'flex',alignItems:'center',gap:'6px'}}
+              onClick={()=>setShowProxyModal(true)}
+              title="Ver colección de proxies guardados"
+            >
+              📚 Colección Proxy
+              {proxyCollection.length > 0 && (
+                <span style={{
+                  background:'rgba(139,92,246,.3)', color:'var(--accent2)',
+                  borderRadius:'10px', fontSize:'10px', fontWeight:700,
+                  padding:'0 5px', lineHeight:'16px', minWidth:'16px',
+                  textAlign:'center', border:'1px solid rgba(139,92,246,.4)',
+                }}>{proxyCollection.length}</span>
+              )}
+            </button>
             <button className="btn btn-secondary" onClick={()=>{ setCard({...defaultCard}); setArt(null); }}>↺ Limpiar</button>
           </div>
         </div>
@@ -1541,7 +2584,7 @@ function EditorSection() {
         {/* ── PREVIEW ── */}
         <div className="preview-panel">
           <div style={{display:'flex',alignItems:'center',gap:'10px',flexWrap:'wrap'}}>
-            <span className="preview-label">Vista previa en tiempo real</span>
+            <span className="preview-label" style={{fontFamily:"'Cinzel Decorative',serif",fontSize:'10px',letterSpacing:'2px',color:'rgba(196,154,42,.6)'}}>✦ Mesa de Invocación ✦</span>
             <button
               style={{
                 padding:'4px 10px', fontSize:'11px', borderRadius:'6px', fontWeight:600,
@@ -1555,7 +2598,15 @@ function EditorSection() {
             </button>
           </div>
 
-          <div className="card-wrap">
+          <div className="altar-stage">
+            {/* Anillos de runas */}
+            <div className="altar-ring altar-ring-1" />
+            <div className="altar-ring altar-ring-2" />
+            <div className="altar-ring altar-ring-3" />
+            {/* Glow bajo la carta */}
+            <div className="altar-card-glow" />
+
+          <div className="card-wrap" style={{position:'relative',zIndex:1}}>
             {Array.from({length: Math.max(1, copies)}, (_,i) => (
               <div key={i} className="editor-card-outer">
                 <div className="editor-card-scale">
@@ -1583,6 +2634,7 @@ function EditorSection() {
               </div>
             ))}
           </div>
+          </div>{/* /altar-stage */}
 
           {showSafeZone && (() => {
             const era = ART_ERAS[card.artEra || 'postmodern'] || ART_ERAS.postmodern;
@@ -1608,6 +2660,17 @@ function EditorSection() {
           </p>
         </div>
       </div>
+
+      {/* ── PROXY COLLECTION MODAL ── */}
+      {showProxyModal && (
+        <ProxyCollectionModal
+          collection={proxyCollection}
+          onClose={() => setShowProxyModal(false)}
+          onRemove={removeFromProxy}
+          onClear={clearProxyCollection}
+          onAdd={addToProxyCollection}
+        />
+      )}
     </div>
   );
 }
@@ -1615,13 +2678,6 @@ function EditorSection() {
 function App() {
   return (
     <div className="app">
-      <header className="header">
-        <div className="header-logo">Kaza's <span>Grimoire</span></div>
-        <nav className="nav">
-          <a href="editor.html" className="nav-btn active">✏️ Editor Proxy</a>
-          <a href="coleccion.html" className="nav-btn">📦 Mi Colección</a>
-        </nav>
-      </header>
       <main className="main">
         <EditorSection />
       </main>
