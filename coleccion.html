@@ -31,25 +31,21 @@
     button { cursor: pointer; border: none; font-family: inherit; }
 
     .back-btn {
-      position: fixed;
-      top: 24px; left: 28px;
-      background: rgba(10,6,20,0.65);
-      border: 1px solid rgba(196,154,42,0.55);
+      background: transparent;
+      border: 1px solid rgba(196,154,42,0.45);
       color: #d4aa44;
       font-family: 'Palatino Linotype', Palatino, serif;
-      font-size: 13px;
+      font-size: 12px;
       letter-spacing: 2px;
       padding: 6px 14px;
       border-radius: 4px;
       cursor: pointer;
-      z-index: 9999;
       text-decoration: none;
       display: inline-flex;
       align-items: center;
-      backdrop-filter: blur(4px);
       transition: border-color .2s, color .2s, background .2s;
     }
-    .back-btn:hover { border-color: rgba(196,154,42,0.9); color: #f0cc66; background: rgba(10,6,20,0.85); }
+    .back-btn:hover { border-color: rgba(196,154,42,0.9); color: #f0cc66; background: rgba(196,154,42,0.08); }
 
     /* Footer */
     .page-footer {
@@ -480,7 +476,7 @@
     .folder-tab.active { border-color: var(--accent2); background: rgba(139,92,246,.12); }
     .folder-tab-icon { font-size: 16px; flex-shrink: 0; }
     .folder-tab-info { flex: 1; min-width: 0; }
-    .folder-tab-name { font-size: 13px; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .folder-tab-name { font-size: 13px; font-weight: 600; color: var(--text); word-break: break-word; white-space: normal; line-height: 1.3; }
     .folder-tab-count { font-size: 10px; color: var(--text2); margin-top: 1px; }
     .folder-tab-actions { display: flex; gap: 2px; opacity: 0; transition: opacity .12s; flex-shrink: 0; }
     .folder-tab:hover .folder-tab-actions, .folder-tab.active .folder-tab-actions { opacity: 1; }
@@ -603,12 +599,11 @@
   </style>
 </head>
 <body>
-<a href="index.html" class="back-btn">✦ VOLVER</a>
 <div id="root"></div>
 <div class="page-footer">✦ creado por mr.tora · 2026 ✦</div>
 
 <script type="text/babel">
-const { useState, useEffect, useCallback, useRef } = React;
+const { useState, useEffect, useCallback, useRef, useMemo } = React;
 
 /* ─── MANA SYMBOL via Scryfall SVG ─── */
 const SCRYFALL_SYM = 'https://svgs.scryfall.io/card-symbols/';
@@ -679,7 +674,7 @@ function ManaCost({ cost, size = 14 }) {
 }
 
 /* ─── CARD DATA CACHE (localStorage) ─── */
-const CARD_CACHE_KEY = 'mtg_card_cache_v2';
+const CARD_CACHE_KEY = 'mtg_card_cache_v3';
 const PRICE_TTL = 24 * 60 * 60 * 1000; // 24 horas
 
 function readCardCache() {
@@ -716,6 +711,7 @@ async function fetchCardCached(set, number, forceRefresh = false) {
     cmc:          d.cmc        || 0,
     priceEur:     d.prices?.eur      || null,
     priceFoilEur: d.prices?.eur_foil || null,
+    legalities:   d.legalities        || {},
   };
   const cache = readCardCache();
   cache[key] = { d: slim, at: Date.now() };
@@ -1019,11 +1015,55 @@ function PrintingModal({ cardName, onClose, onAdd, replaceMode = false }) {
   );
 }
 
+/* ─── LEGALITY CONSTANTS ─── */
+const FORMAT_ORDER = [
+  ['standard',      'Standard'],
+  ['pioneer',       'Pioneer'],
+  ['modern',        'Modern'],
+  ['legacy',        'Legacy'],
+  ['vintage',       'Vintage'],
+  ['commander',     'Commander'],
+  ['oathbreaker',   'Oathbreaker'],
+  ['brawl',         'Brawl'],
+  ['historic',      'Historic'],
+  ['timeless',      'Timeless'],
+  ['alchemy',       'Alchemy'],
+  ['explorer',      'Explorer'],
+  ['premodern',     'Premodern'],
+  ['historicbrawl', 'Hist Brawl'],
+];
+const LEGALITY_BADGE = {
+  legal:      { bg:'rgba(22,100,52,.85)',   border:'#2a9e5c', textColor:'#7ef5a8', label:'Legal' },
+  not_legal:  { bg:'rgba(255,255,255,.04)', border:'rgba(255,255,255,.1)',  textColor:'var(--text2)', label:'No legal' },
+  banned:     { bg:'rgba(140,20,20,.8)',    border:'#cc4040', textColor:'#ff9090', label:'Baneada' },
+  restricted: { bg:'rgba(120,88,0,.75)',    border:'#c09010', textColor:'#ffd060', label:'Restringida' },
+};
+
 /* ─── DETAIL MODAL ─── */
 function DetailModal({ card, onClose, onChangeCount, onUpdatePrice }) {
   const [editingPrice, setEditingPrice] = useState(false);
   const [editN, setEditN] = useState(card.priceEur ? parseFloat(card.priceEur).toFixed(2) : '');
   const [editF, setEditF] = useState(card.priceFoilEur ? parseFloat(card.priceFoilEur).toFixed(2) : '');
+  const [legalities, setLegalities] = useState(null); // null = cargando
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadLegalities() {
+      try {
+        const url = card.scryfallId
+          ? `https://api.scryfall.com/cards/${card.scryfallId}`
+          : (card.setCode && card.collectorNumber)
+            ? `https://api.scryfall.com/cards/${card.setCode.toLowerCase()}/${card.collectorNumber}`
+            : null;
+        if (!url) { setLegalities({}); return; }
+        const r = await fetch(url);
+        const d = await r.json();
+        if (!cancelled) setLegalities(d.legalities || {});
+      } catch { if (!cancelled) setLegalities({}); }
+    }
+    loadLegalities();
+    return () => { cancelled = true; };
+  }, [card.scryfallId, card.setCode, card.collectorNumber]);
 
   const savePrice = () => {
     onUpdatePrice(editN !== '' ? editN : null, editF !== '' ? editF : null);
@@ -1032,7 +1072,7 @@ function DetailModal({ card, onClose, onChangeCount, onUpdatePrice }) {
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" onClick={e=>e.stopPropagation()} style={{maxWidth:'380px'}}>
+      <div className="modal" onClick={e=>e.stopPropagation()} style={{maxWidth:'460px'}}>
         <div className="modal-header">
           <h3>{card.name} {card.isFoil&&'✨'}</h3>
           <button className="icon-btn" onClick={onClose}>✕</button>
@@ -1079,6 +1119,58 @@ function DetailModal({ card, onClose, onChangeCount, onUpdatePrice }) {
             </div>
           )}
         </div>
+        {/* ── Legalidades ── */}
+        <div style={{marginTop:'16px',padding:'12px 14px',background:'var(--surface2)',borderRadius:'10px',border:'1px solid var(--border)'}}>
+          <div style={{
+            fontSize:'10px',fontWeight:700,color:'var(--text2)',
+            textTransform:'uppercase',letterSpacing:'.6px',marginBottom:'10px',
+            fontFamily:"'Cinzel Decorative','Palatino Linotype',serif",
+            display:'flex',alignItems:'center',gap:'8px',
+          }}>
+            <span>⚖️ Legalidad por formato</span>
+            {card.scryfallId && (
+              <a href={`https://scryfall.com/card/${card.scryfallId}`} target="_blank" rel="noopener noreferrer"
+                style={{fontSize:'9px',color:'var(--accent2)',textDecoration:'none',marginLeft:'auto',
+                  padding:'2px 7px',borderRadius:'4px',border:'1px solid rgba(139,92,246,.4)',
+                  background:'rgba(139,92,246,.08)',
+                }}>
+                Ver en Scryfall ↗
+              </a>
+            )}
+          </div>
+          {legalities === null ? (
+            <div style={{display:'flex',alignItems:'center',gap:'8px',color:'var(--text2)',fontSize:'12px',padding:'6px 0'}}>
+              <div className="spinner" style={{width:'13px',height:'13px'}}/>
+              <span>Consultando Scryfall…</span>
+            </div>
+          ) : Object.keys(legalities).length === 0 ? (
+            <div style={{fontSize:'12px',color:'var(--text2)'}}>Sin información disponible</div>
+          ) : (
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'3px'}}>
+              {FORMAT_ORDER.filter(([k]) => k in legalities).map(([key, label]) => {
+                const status = legalities[key];
+                const b = LEGALITY_BADGE[status] || LEGALITY_BADGE.not_legal;
+                return (
+                  <div key={key} style={{
+                    display:'flex',alignItems:'center',justifyContent:'space-between',
+                    padding:'4px 8px',borderRadius:'5px',
+                    background: b.bg,
+                    border:`1px solid ${b.border}`,
+                    opacity: status === 'not_legal' ? 0.5 : 1,
+                  }}>
+                    <span style={{fontSize:'10px',fontWeight:600,color: status === 'not_legal' ? 'var(--text2)' : '#e8e8f0',letterSpacing:'.2px'}}>
+                      {label}
+                    </span>
+                    <span style={{fontSize:'9px',fontWeight:800,color: b.textColor,textTransform:'uppercase',letterSpacing:'.4px'}}>
+                      {b.label}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
         <div style={{display:'flex',gap:'8px',marginTop:'14px',flexWrap:'wrap'}}>
           <a
             href={`https://www.cardmarket.com/es/Magic/Products/Search?searchString=${encodeURIComponent(card.name)}`}
@@ -1558,7 +1650,7 @@ function ImportDeckModal({ onClose, onImport }) {
 }
 
 /* ─── DECK VIEW ─── */
-function DeckView({ deck, allCollectionCards, onReplaceEntry, onDeleteDeck }) {
+function DeckView({ deck, allCollectionCards, onReplaceEntry, onDeleteDeck, showToast }) {
   const [cardData, setCardData] = useState({});
   const [loadingCards, setLoadingCards] = useState(true);
   const [loadProgress, setLoadProgress] = useState({ done: 0, total: 0, fromCache: 0 });
@@ -1566,78 +1658,6 @@ function DeckView({ deck, allCollectionCards, onReplaceEntry, onDeleteDeck }) {
   const forceRefreshRef = useRef(false);
   const [replacingEntry, setReplacingEntry] = useState(null);
 
-  // ── 17lands win rate ──
-  const [showWR, setShowWR]         = useState(false);
-  const [wrFormat, setWrFormat]     = useState('PremierDraft');
-  const [winRateData, setWinRateData] = useState({});
-  const [wrLoading, setWrLoading]   = useState(false);
-  const [wrError, setWrError]       = useState('');
-  const wrCache = useRef({});  // { 'SET-FORMAT': { name: { gihWR, nGames, avgPick } } }
-
-  const WR_FORMATS = [
-    { id: 'PremierDraft',  label: 'Premier Draft' },
-    { id: 'TradDraft',     label: 'Traditional Draft' },
-    { id: 'Sealed',        label: 'Sellado' },
-    { id: 'QuickDraft',    label: 'Quick Draft' },
-  ];
-
-  const fetchWinRates = async () => {
-    setWrLoading(true); setWrError('');
-    const sets = [...new Set(deck.entries.map(e => e.set.toUpperCase()))];
-    const newData = {};
-    let anyError = false;
-
-    for (const set of sets) {
-      const key = `${set}-${wrFormat}`;
-      if (wrCache.current[key]) { Object.assign(newData, wrCache.current[key]); continue; }
-      const base = `https://www.17lands.com/card_ratings/data?expansion=${set}&format=${wrFormat}`;
-      let cards = null;
-      // Intento directo primero, luego proxy CORS
-      for (const url of [base, `https://corsproxy.io/?${encodeURIComponent(base)}`]) {
-        try {
-          const r = await fetch(url);
-          if (!r.ok) continue;
-          cards = await r.json();
-          break;
-        } catch { continue; }
-      }
-      if (!Array.isArray(cards)) { anyError = true; continue; }
-      const setData = {};
-      for (const c of cards) {
-        if (c.ever_drawn_win_rate != null) {
-          const norm = c.name?.trim().toLowerCase();
-          setData[norm] = {
-            gihWR:   c.ever_drawn_win_rate,
-            nGames:  c.ever_drawn_game_count || 0,
-            avgPick: c.avg_pick ?? null,
-          };
-        }
-      }
-      wrCache.current[key] = setData;
-      Object.assign(newData, setData);
-    }
-
-    setWinRateData(prev => ({ ...prev, ...newData }));
-    if (anyError) setWrError('Algunos sets no tienen datos en 17lands para este formato, o el servicio no está disponible.');
-    setWrLoading(false);
-  };
-
-  // Busca win rate de una entrada (maneja doble cara)
-  const getWR = entryName => {
-    const norm = entryName.trim().toLowerCase();
-    if (winRateData[norm]) return winRateData[norm];
-    // Fallback doble cara: buscar por primera parte
-    const front = norm.split(' // ')[0];
-    return Object.entries(winRateData).find(([k]) => k === front || k.startsWith(front + ' //'))?.[1] || null;
-  };
-
-  const wrBadgeStyle = wr => {
-    if (wr >= 0.60) return { bg: '#7c3aed', label: 'Bomba' };
-    if (wr >= 0.57) return { bg: '#059669', label: 'Excelente' };
-    if (wr >= 0.53) return { bg: '#d97706', label: 'Buena' };
-    if (wr >= 0.50) return { bg: '#64748b', label: 'Media' };
-    return                  { bg: '#dc2626', label: 'Baja' };
-  };
 
   useEffect(() => {
     let cancelled = false;
@@ -1657,12 +1677,13 @@ function DeckView({ deck, allCollectionCards, onReplaceEntry, onDeleteDeck }) {
           const slim = await fetchCardCached(entry.set, entry.number, doForce);
           if (slim) {
             data[entry.name] = {
-              img:       slim.imgSmall,
-              imgNormal: slim.imgNormal,
-              typeLine:  slim.typeLine,
-              manaCost:  slim.manaCost,
-              cmc:       slim.cmc,
-              priceEur:  slim.priceEur,
+              img:        slim.imgSmall,
+              imgNormal:  slim.imgNormal,
+              typeLine:   slim.typeLine,
+              manaCost:   slim.manaCost,
+              cmc:        slim.cmc,
+              priceEur:   slim.priceEur,
+              legalities: slim.legalities || {},
             };
             if (slim._fromCache) {
               fromCache++;
@@ -1756,6 +1777,35 @@ function DeckView({ deck, allCollectionCards, onReplaceEntry, onDeleteDeck }) {
     ? deck.entries.reduce((sum, e) => sum + parseFloat(cardData[e.name]?.priceEur || 0) * e.qty, 0)
     : null;
 
+  // Average CMC (exclude lands)
+  const avgCmc = !loadingCards ? (() => {
+    const nonLands = deck.entries.filter(e => !(cardData[e.name]?.typeLine||'').toLowerCase().includes('land'));
+    const totalCmc = nonLands.reduce((s, e) => s + (cardData[e.name]?.cmc || 0) * e.qty, 0);
+    const totalQty = nonLands.reduce((s, e) => s + e.qty, 0);
+    return totalQty > 0 ? (totalCmc / totalQty).toFixed(2) : '—';
+  })() : null;
+
+  // Color distribution (count colored pips from mana costs)
+  const COLOR_PIPS = ['W','U','B','R','G'];
+  const COLOR_META = {
+    W: { label:'Blanco', dot:'#f5f0cc', border:'#c8b86a', bg:'rgba(245,240,180,.13)' },
+    U: { label:'Azul',   dot:'#5599ee', border:'#3366cc', bg:'rgba(68,136,220,.13)' },
+    B: { label:'Negro',  dot:'#aa77dd', border:'#7744aa', bg:'rgba(140,80,200,.13)' },
+    R: { label:'Rojo',   dot:'#ee5555', border:'#cc2222', bg:'rgba(220,68,68,.13)' },
+    G: { label:'Verde',  dot:'#44cc66', border:'#228844', bg:'rgba(68,187,100,.13)' },
+  };
+  const colorDist = !loadingCards ? (() => {
+    const counts = { W:0, U:0, B:0, R:0, G:0 };
+    for (const entry of deck.entries) {
+      const mc = cardData[entry.name]?.manaCost || '';
+      for (const c of COLOR_PIPS) {
+        const hits = (mc.match(new RegExp(`\\{${c}\\}`, 'g')) || []).length;
+        counts[c] += hits * entry.qty;
+      }
+    }
+    return counts;
+  })() : null;
+
   // Mana curve (exclude lands, cap at 7+)
   const manaCurve = {};
   for (const entry of deck.entries) {
@@ -1765,6 +1815,33 @@ function DeckView({ deck, allCollectionCards, onReplaceEntry, onDeleteDeck }) {
     manaCurve[cmc] = (manaCurve[cmc] || 0) + entry.qty;
   }
   const maxCurveCount = Math.max(1, ...Object.values(manaCurve));
+
+  // ── Legalidad del deck por formato ──
+  // Un formato es legal para el deck si TODAS las cartas tienen status 'legal' o 'restricted'
+  // Un formato es ilegal si alguna carta tiene 'banned' o 'not_legal'
+  const deckFormats = useMemo(() => {
+    if (loadingCards || deck.entries.length === 0) return null;
+    // Verificar que todas las cartas tengan datos de legalidad cargados
+    const hasAllData = deck.entries.every(e => cardData[e.name]?.legalities);
+    if (!hasAllData) return null;
+
+    const result = {};
+    for (const [fmt] of FORMAT_ORDER) {
+      let worst = 'legal'; // legal → restricted → not_legal → banned
+      for (const entry of deck.entries) {
+        const status = cardData[entry.name]?.legalities?.[fmt] || 'not_legal';
+        if (status === 'banned')     { worst = 'banned'; break; }
+        if (status === 'not_legal')  { worst = 'not_legal'; continue; }
+        if (status === 'restricted') {
+          // En Vintage, restricted = max 1 copia
+          if (entry.qty > 1) { worst = 'not_legal'; continue; }
+          if (worst === 'legal') worst = 'restricted';
+        }
+      }
+      result[fmt] = worst;
+    }
+    return result;
+  }, [cardData, loadingCards, deck.entries]);
 
   const fallbackImg = `data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='36' height='50'><rect width='36' height='50' rx='3' fill='%23333'/><text x='18' y='28' text-anchor='middle' fill='%23666' font-size='9'>?</text></svg>`;
 
@@ -1782,6 +1859,9 @@ function DeckView({ deck, allCollectionCards, onReplaceEntry, onDeleteDeck }) {
     });
   };
   const hideCardPreview = () => setHoverPreview(null);
+
+  // ── Shopping list ──
+  const [showShoppingList, setShowShoppingList] = useState(false);
 
   // ── Random Hand ──
   const [showHand, setShowHand] = useState(false);
@@ -1847,6 +1927,77 @@ function DeckView({ deck, allCollectionCards, onReplaceEntry, onDeleteDeck }) {
       {/* ── Columna derecha: contenido ── */}
       <div style={{flex:1,minWidth:0,display:'flex',flexDirection:'column',gap:'16px'}}>
 
+      {/* ── Panel de legalidad del deck por formato ── */}
+      <div style={{
+        background:'var(--surface)', border:'1px solid var(--border)',
+        borderRadius:'12px', padding:'14px 16px',
+      }}>
+        <div style={{
+          fontSize:'10px', fontWeight:700, color:'var(--text2)',
+          textTransform:'uppercase', letterSpacing:'.6px', marginBottom:'10px',
+          fontFamily:"'Cinzel Decorative','Palatino Linotype',serif",
+          display:'flex', alignItems:'center', gap:'8px',
+        }}>
+          <span>⚖️ Legalidad del mazo por formato</span>
+          {!loadingCards && deckFormats && (() => {
+            const legalCount = Object.values(deckFormats).filter(s => s === 'legal' || s === 'restricted').length;
+            return (
+              <span style={{fontFamily:'inherit',fontSize:'10px',color:'var(--text2)',marginLeft:'auto',fontWeight:400}}>
+                <span style={{color:'#7ef5a8',fontWeight:700}}>{legalCount}</span> legales ·{' '}
+                <span style={{color:'rgba(255,255,255,.3)',fontWeight:400}}>{FORMAT_ORDER.length - legalCount}</span> no legales
+              </span>
+            );
+          })()}
+        </div>
+
+        {loadingCards ? (
+          <div style={{display:'flex',alignItems:'center',gap:'8px',color:'var(--text2)',fontSize:'12px',padding:'4px 0'}}>
+            <div className="spinner" style={{width:'13px',height:'13px'}}/>
+            <span>Cargando datos de legalidad…</span>
+          </div>
+        ) : !deckFormats ? (
+          <div style={{fontSize:'12px',color:'var(--text2)',padding:'4px 0'}}>Sin datos de legalidad disponibles aún.</div>
+        ) : (
+          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(120px,1fr))',gap:'3px'}}>
+            {FORMAT_ORDER.map(([key, label]) => {
+              const status = deckFormats[key] || 'not_legal';
+              const b = LEGALITY_BADGE[status] || LEGALITY_BADGE.not_legal;
+              const isOk = status === 'legal' || status === 'restricted';
+              // Verificar qué carta(s) causan el problema
+              const offenders = !isOk
+                ? deck.entries
+                    .filter(e => {
+                      const s = cardData[e.name]?.legalities?.[key];
+                      return s === 'banned' || s === 'not_legal';
+                    })
+                    .slice(0, 3)
+                    .map(e => e.name)
+                : [];
+              return (
+                <div key={key}
+                  title={offenders.length ? `No legal por: ${offenders.join(', ')}${offenders.length < deck.entries.filter(e => ['banned','not_legal'].includes(cardData[e.name]?.legalities?.[key])).length ? '…' : ''}` : label}
+                  style={{
+                    display:'flex', alignItems:'center', justifyContent:'space-between',
+                    padding:'4px 8px', borderRadius:'5px',
+                    background: b.bg,
+                    border:`1px solid ${b.border}`,
+                    opacity: !isOk ? 0.45 : 1,
+                    cursor: offenders.length ? 'help' : 'default',
+                    transition:'opacity .15s',
+                  }}>
+                  <span style={{fontSize:'10px', fontWeight:600, color: isOk ? '#e8e8f0' : 'var(--text2)', letterSpacing:'.2px'}}>
+                    {label}
+                  </span>
+                  <span style={{fontSize:'9px', fontWeight:800, color: b.textColor, textTransform:'uppercase', letterSpacing:'.3px', marginLeft:'4px'}}>
+                    {b.label}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
       {/* Completion stats + value */}
       <div className="stats-bar" style={{flexDirection:'column',gap:'12px'}}>
         <div style={{display:'flex',gap:'24px',flexWrap:'wrap',alignItems:'center'}}>
@@ -1868,6 +2019,13 @@ function DeckView({ deck, allCollectionCards, onReplaceEntry, onDeleteDeck }) {
               : <span className="stat-value" style={{color:'var(--text2)',fontSize:'16px'}}>…</span>
             }
             <span className="stat-label">Valor total del deck</span>
+          </div>
+          <div className="stat-item">
+            {avgCmc !== null
+              ? <span className="stat-value" style={{color:'var(--accent)'}}>{avgCmc}</span>
+              : <span className="stat-value" style={{color:'var(--text2)',fontSize:'16px'}}>…</span>
+            }
+            <span className="stat-label">CMC promedio</span>
           </div>
           <div style={{marginLeft:'auto',display:'flex',alignItems:'center',gap:'8px',flexWrap:'wrap'}}>
             {loadingCards ? (
@@ -1909,14 +2067,15 @@ function DeckView({ deck, allCollectionCards, onReplaceEntry, onDeleteDeck }) {
             >
               📤 Exportar
             </button>
-            <button
-              className="btn btn-secondary"
-              style={{fontSize:'13px',padding:'8px 16px', borderColor: showWR ? 'var(--accent2)' : 'var(--border)', color: showWR ? 'var(--accent2)' : 'var(--text2)'}}
-              onClick={() => setShowWR(v => !v)}
-              title="Ver datos de win rate por carta (17lands)"
-            >
-              📊 Win Rate
-            </button>
+            {!loadingCards && deck.entries.some(e => getOwnedInfo(e).count < e.qty) && (
+              <button
+                className="btn btn-secondary"
+                style={{fontSize:'13px',padding:'8px 16px',borderColor:'#f97316',color: showShoppingList ? '#fff' : '#f97316', background: showShoppingList ? '#f97316' : 'transparent'}}
+                onClick={() => setShowShoppingList(s => !s)}
+              >
+                🛒 {showShoppingList ? 'Ocultar' : `Faltantes (${deck.entries.filter(e => getOwnedInfo(e).count < e.qty).length})`}
+              </button>
+            )}
             {onDeleteDeck && (
               <button
                 className="btn btn-secondary"
@@ -1932,56 +2091,6 @@ function DeckView({ deck, allCollectionCards, onReplaceEntry, onDeleteDeck }) {
           <div className="deck-progress-fill" style={{width:`${pct}%`,background:pctColor}} />
         </div>
       </div>
-
-      {/* ── Panel 17lands ── */}
-      {showWR && (
-        <div style={{background:'var(--surface)',border:'1px solid var(--border)',borderRadius:'12px',padding:'14px 16px',display:'flex',flexDirection:'column',gap:'10px'}}>
-          <div style={{display:'flex',alignItems:'center',gap:'10px',flexWrap:'wrap'}}>
-            <span style={{fontSize:'13px',fontWeight:700,color:'var(--text)'}}>📊 17lands — Win Rate por carta</span>
-            <select
-              value={wrFormat}
-              onChange={e => setWrFormat(e.target.value)}
-              style={{background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:'6px',padding:'5px 10px',color:'var(--text)',fontSize:'12px',cursor:'pointer'}}
-            >
-              {WR_FORMATS.map(f => <option key={f.id} value={f.id}>{f.label}</option>)}
-            </select>
-            <button
-              className="btn btn-primary"
-              style={{fontSize:'12px',padding:'6px 14px'}}
-              onClick={fetchWinRates}
-              disabled={wrLoading}
-            >
-              {wrLoading ? '⏳ Cargando…' : '🔄 Cargar datos'}
-            </button>
-            {Object.keys(winRateData).length > 0 && (
-              <span style={{fontSize:'11px',color:'var(--text2)'}}>
-                {Object.keys(winRateData).length} cartas con datos
-              </span>
-            )}
-          </div>
-          {/* Leyenda */}
-          <div style={{display:'flex',gap:'8px',flexWrap:'wrap',alignItems:'center'}}>
-            <span style={{fontSize:'10px',color:'var(--text2)',fontWeight:700,textTransform:'uppercase',letterSpacing:'.4px'}}>GIH WR:</span>
-            {[
-              { label:'Bomba ≥60%',    bg:'#7c3aed' },
-              { label:'Excelente ≥57%',bg:'#059669' },
-              { label:'Buena ≥53%',    bg:'#d97706' },
-              { label:'Media ≥50%',    bg:'#64748b' },
-              { label:'Baja <50%',     bg:'#dc2626' },
-            ].map(b => (
-              <span key={b.label} style={{display:'flex',alignItems:'center',gap:'4px',fontSize:'10px',color:'var(--text2)'}}>
-                <span style={{width:'10px',height:'10px',borderRadius:'2px',background:b.bg,display:'inline-block'}}/>
-                {b.label}
-              </span>
-            ))}
-          </div>
-          {wrError && <div style={{fontSize:'11px',color:'var(--danger)',lineHeight:1.5}}>{wrError}</div>}
-          <div style={{fontSize:'11px',color:'var(--text2)',lineHeight:1.5}}>
-            Datos de <strong style={{color:'var(--text)'}}>17lands.com</strong> — GIH WR = % victorias en partidas donde tuviste esta carta en mano.
-            Solo disponible para sets y formatos limitados (Draft/Sealed) con datos suficientes.
-          </div>
-        </div>
-      )}
 
       {/* Mana curve */}
       {!loadingCards && Object.keys(manaCurve).length > 0 && (
@@ -2011,6 +2120,121 @@ function DeckView({ deck, allCollectionCards, onReplaceEntry, onDeleteDeck }) {
               );
             })}
           </div>
+        </div>
+      )}
+
+      {/* ── Lista de faltantes ── */}
+      {showShoppingList && !loadingCards && (() => {
+        const missing = deck.entries
+          .map(e => ({ ...e, owned: getOwnedInfo(e).count }))
+          .filter(e => e.owned < e.qty);
+        const copyList = () => {
+          const text = missing.map(e => `${e.qty - e.owned} ${e.name}`).join('\n');
+          navigator.clipboard.writeText(text).then(() => {
+            showToast('✅ Lista copiada al portapapeles');
+          });
+        };
+        return (
+          <div style={{background:'var(--surface)',border:'1px solid rgba(249,115,22,.4)',borderRadius:'12px',padding:'14px 16px'}}>
+            <div style={{display:'flex',alignItems:'center',marginBottom:'12px',gap:'8px'}}>
+              <div style={{fontSize:'11px',fontWeight:700,color:'#f97316',letterSpacing:'.4px',fontFamily:"'Cinzel Decorative', serif",flex:1}}>
+                🛒 Cartas Faltantes
+              </div>
+              <span style={{fontSize:'11px',color:'var(--text2)'}}>
+                {missing.reduce((s,e)=>s+(e.qty-e.owned),0)} copias · {missing.length} cartas distintas
+              </span>
+              <button
+                onClick={copyList}
+                style={{
+                  fontSize:'11px',padding:'4px 10px',borderRadius:'6px',
+                  background:'transparent',border:'1px solid rgba(249,115,22,.5)',
+                  color:'#f97316',cursor:'pointer',transition:'all .12s',flexShrink:0,
+                }}
+              >
+                📋 Copiar lista
+              </button>
+            </div>
+            <div style={{display:'flex',flexDirection:'column',gap:'3px'}}>
+              {missing.map(e => {
+                const need = e.qty - e.owned;
+                const img  = cardData[e.name]?.img || '';
+                const mc   = cardData[e.name]?.manaCost || '';
+                const price = cardData[e.name]?.priceEur;
+                return (
+                  <div key={e.name} style={{
+                    display:'flex',alignItems:'center',gap:'8px',
+                    padding:'5px 8px',borderRadius:'6px',
+                    background:'rgba(249,115,22,.05)',
+                    border:'1px solid rgba(249,115,22,.12)',
+                  }}
+                    onMouseEnter={ev => showCardPreview(ev, e.name)}
+                    onMouseLeave={hideCardPreview}
+                  >
+                    {img && <img src={img} alt={e.name} style={{width:'24px',height:'34px',objectFit:'cover',borderRadius:'3px',flexShrink:0}} onError={ev=>ev.target.style.display='none'} />}
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{display:'flex',alignItems:'center',gap:'6px'}}>
+                        <span style={{fontSize:'13px',fontWeight:600,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{e.name}</span>
+                        {mc && <ManaCost cost={mc} size={11} />}
+                      </div>
+                      <div style={{fontSize:'10px',color:'var(--text2)'}}>
+                        Tienes {e.owned} · Necesitas {e.qty}
+                        {price && <span style={{color:'#4ade80',marginLeft:'8px'}}>€{(parseFloat(price)*need).toFixed(2)}</span>}
+                      </div>
+                    </div>
+                    <div style={{
+                      flexShrink:0,fontWeight:800,fontSize:'14px',color:'#f97316',
+                      background:'rgba(249,115,22,.15)',borderRadius:'5px',
+                      padding:'2px 8px',
+                    }}>
+                      ×{need}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ── Distribución de colores ── */}
+      {!loadingCards && colorDist && COLOR_PIPS.some(c => colorDist[c] > 0) && (
+        <div style={{background:'var(--surface)',border:'1px solid var(--border)',borderRadius:'12px',padding:'14px 16px'}}>
+          <div style={{fontSize:'11px',fontWeight:700,color:'var(--text2)',letterSpacing:'.4px',marginBottom:'12px',fontFamily:"'Cinzel Decorative', serif"}}>
+            Distribución de Colores
+          </div>
+          {(() => {
+            const total = COLOR_PIPS.reduce((s,c) => s + colorDist[c], 0) || 1;
+            return (
+              <div style={{display:'flex',flexDirection:'column',gap:'6px'}}>
+                {COLOR_PIPS.filter(c => colorDist[c] > 0).map(c => {
+                  const meta = COLOR_META[c];
+                  const pct  = colorDist[c] / total * 100;
+                  return (
+                    <div key={c} style={{display:'flex',alignItems:'center',gap:'8px'}}>
+                      <div style={{
+                        width:'14px',height:'14px',borderRadius:'50%',flexShrink:0,
+                        background:meta.dot, border:`2px solid ${meta.border}`,
+                        boxShadow:`0 0 6px ${meta.dot}55`,
+                      }} title={meta.label} />
+                      <div style={{flex:1,height:'10px',borderRadius:'5px',background:'rgba(255,255,255,.06)',overflow:'hidden'}}>
+                        <div style={{
+                          height:'100%',borderRadius:'5px',
+                          background:`linear-gradient(90deg,${meta.dot}cc,${meta.dot}77)`,
+                          width:`${pct}%`, transition:'width .5s ease',
+                        }} />
+                      </div>
+                      <span style={{fontSize:'11px',fontWeight:700,color:meta.dot,width:'28px',textAlign:'right',flexShrink:0}}>
+                        {colorDist[c]}
+                      </span>
+                      <span style={{fontSize:'10px',color:'var(--text2)',width:'32px',textAlign:'right',flexShrink:0}}>
+                        {pct.toFixed(0)}%
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
         </div>
       )}
 
@@ -2213,29 +2437,6 @@ function DeckView({ deck, allCollectionCards, onReplaceEntry, onDeleteDeck }) {
                   <div style={{fontSize:'16px',flexShrink:0,width:'20px',textAlign:'center'}}>
                     {complete ? '✅' : partial ? '⚠️' : '❌'}
                   </div>
-                  {/* Win rate badge */}
-                  {showWR && (() => {
-                    const wr = getWR(entry.name);
-                    if (!wr) return showWR && !wrLoading
-                      ? <div style={{fontSize:'9px',color:'var(--text2)',flexShrink:0,width:'44px',textAlign:'center',lineHeight:1.3}}>sin datos</div>
-                      : null;
-                    const { bg } = wrBadgeStyle(wr.gihWR);
-                    return (
-                      <div style={{
-                        flexShrink:0,textAlign:'center',minWidth:'48px',
-                        background:bg,borderRadius:'5px',padding:'3px 5px',
-                        display:'flex',flexDirection:'column',gap:'1px',
-                      }}
-                        title={`GIH WR: ${(wr.gihWR*100).toFixed(1)}% · ${wr.nGames.toLocaleString()} partidas${wr.avgPick!=null?' · ATA: '+wr.avgPick.toFixed(1):''}`}
-                      >
-                        <span style={{fontSize:'11px',fontWeight:700,color:'#fff'}}>{(wr.gihWR*100).toFixed(1)}%</span>
-                        <span style={{fontSize:'8px',color:'rgba(255,255,255,.75)',fontWeight:600,letterSpacing:'.3px'}}>GIH WR</span>
-                        {wr.avgPick != null && (
-                          <span style={{fontSize:'8px',color:'rgba(255,255,255,.65)'}}>ATA {wr.avgPick.toFixed(1)}</span>
-                        )}
-                      </div>
-                    );
-                  })()}
                   <button
                     onClick={e => { e.stopPropagation(); setReplacingEntry(entry); }}
                     title="Cambiar edición de esta carta en el deck"
@@ -2412,13 +2613,16 @@ function CollectionSection({ showToast }) {
             <span style={{fontSize:'13px',letterSpacing:'2px',opacity:0.7}}>ᚹᛜ</span>
           </div>
         </div>
-        <div className="mode-toggle" style={{marginLeft:'auto'}}>
-          <button className={`mode-toggle-btn${viewMode==='collection'?' active':''}`} onClick={()=>setViewMode('collection')}>
-            📦 Colección
-          </button>
-          <button className={`mode-toggle-btn${viewMode==='decks'?' active':''}`} onClick={()=>setViewMode('decks')}>
-            🃏 Decks{decks.length > 0 ? ` (${decks.length})` : ''}
-          </button>
+        <div style={{marginLeft:'auto',display:'flex',alignItems:'center',gap:'10px'}}>
+          <a href="index.html" className="back-btn">✦ VOLVER</a>
+          <div className="mode-toggle">
+            <button className={`mode-toggle-btn${viewMode==='collection'?' active':''}`} onClick={()=>setViewMode('collection')}>
+              📦 Colección
+            </button>
+            <button className={`mode-toggle-btn${viewMode==='decks'?' active':''}`} onClick={()=>setViewMode('decks')}>
+              🃏 Decks{decks.length > 0 ? ` (${decks.length})` : ''}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -2503,6 +2707,7 @@ function CollectionSection({ showToast }) {
               key={activeDeck.id}
               deck={activeDeck}
               allCollectionCards={allCollectionCards}
+              showToast={showToast}
               onReplaceEntry={(entryName, newSet, newNumber) => {
                 setDecks(prev => prev.map(d =>
                   d.id !== activeDeck.id ? d : {
@@ -2536,11 +2741,15 @@ function CollectionSection({ showToast }) {
             <h3>{folderModal.mode === 'new' ? '📁 Nueva Carpeta' : '✏️ Renombrar Carpeta'}</h3>
             <input
               autoFocus
-              placeholder="Nombre de la carpeta"
+              placeholder="Nombre de la carpeta (máx. 15 caracteres)"
+              maxLength={15}
               value={folderName}
               onChange={e => setFolderName(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter') confirmFolderModal(); }}
             />
+            <div style={{fontSize:'11px',color:'var(--text2)',textAlign:'right',marginTop:'-8px'}}>
+              {folderName.length}/15
+            </div>
             <div className="folder-modal-actions">
               <button className="btn btn-secondary" onClick={() => setFolderModal(null)}>Cancelar</button>
               <button className="btn btn-primary" onClick={confirmFolderModal}>
@@ -2561,11 +2770,15 @@ function CollectionSection({ showToast }) {
             </p>
             <input
               autoFocus
-              placeholder="Nombre de la carpeta"
+              placeholder="Nombre de la carpeta (máx. 15 caracteres)"
+              maxLength={15}
               value={importFolderName}
               onChange={e => setImportFolderName(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter') confirmImport(); }}
             />
+            <div style={{fontSize:'11px',color:'var(--text2)',textAlign:'right',marginTop:'-8px'}}>
+              {importFolderName.length}/15
+            </div>
             <div className="folder-modal-actions">
               <button className="btn btn-secondary" onClick={() => setImportPending(null)}>Cancelar</button>
               <button className="btn btn-primary" onClick={confirmImport}>Importar</button>

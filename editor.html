@@ -1303,6 +1303,60 @@ function ProxyCollectionModal({ collection, onClose, onRemove, onClear, onAdd })
     setProcessing(false);
   };
 
+  /* ── estado de impresión ── */
+  const [printMode, setPrintMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState(new Set());
+
+  const toggleSelect = id => setSelectedIds(prev => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
+
+  const toggleAll = () => {
+    if (selectedIds.size === collection.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(collection.map(c => c.id)));
+    }
+  };
+
+  const printSelected = () => {
+    const toPrint = collection.filter(c => !printMode || selectedIds.has(c.id));
+    if (toPrint.length === 0) return;
+    const cardsHtml = toPrint.map(c =>
+      `<div class="card"><img src="${c.img}" alt="${(c.name||'proxy').replace(/"/g,'&quot;')}"/></div>`
+    ).join('');
+    const html = `<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><title>Proxies — Impresión</title>
+<style>
+@page{size:A4;margin:8mm}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#fff}
+.grid{display:grid;grid-template-columns:repeat(3,63mm);gap:3mm;justify-content:center;align-items:start}
+.card{width:63mm;height:88mm;overflow:hidden;border-radius:3mm;break-inside:avoid;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.card img{width:100%;height:100%;object-fit:fill;display:block}
+</style></head>
+<body><div class="grid">${cardsHtml}</div>
+<script>
+window.onload=function(){
+  var imgs=document.images,t=imgs.length,d=0;
+  if(!t){setTimeout(function(){window.print();},200);return;}
+  for(var i=0;i<t;i++){
+    (function(img){
+      var fn=function(){d++;if(d===t)setTimeout(function(){window.print();},200);};
+      if(img.complete&&img.naturalHeight>0){fn();}else{img.onload=fn;img.onerror=fn;}
+    })(imgs[i]);
+  }
+};
+<\/script>
+</body></html>`;
+    const w = window.open('', '_blank');
+    if (!w) { alert('Permite ventanas emergentes para poder imprimir.'); return; }
+    w.document.write(html);
+    w.document.close();
+  };
+
   /* ── hover state para mostrar carta original ── */
   const [hoveredId, setHoveredId] = useState(null);
 
@@ -1337,11 +1391,51 @@ function ProxyCollectionModal({ collection, onClose, onRemove, onClear, onAdd })
               onChange={handleImportFile} style={{display:'none'}} />
 
             {collection.length > 0 && (
-              <button onClick={onClear} style={{
-                fontSize:'11px', padding:'4px 10px', borderRadius:'6px',
-                border:'1px solid var(--danger)', background:'rgba(224,85,85,.1)',
-                color:'var(--danger)', cursor:'pointer', fontWeight:600,
-              }}>🗑 Vaciar</button>
+              <>
+                {/* ── Botón modo impresión ── */}
+                <button
+                  onClick={() => { setPrintMode(v => !v); setSelectedIds(new Set()); }}
+                  style={{
+                    fontSize:'12px', padding:'5px 12px', borderRadius:'6px', fontWeight:600,
+                    border:`1px solid ${printMode ? 'var(--accent)' : 'var(--border)'}`,
+                    background: printMode ? 'rgba(196,154,42,.15)' : 'var(--surface2)',
+                    color: printMode ? 'var(--accent)' : 'var(--text2)',
+                    cursor:'pointer', display:'flex', alignItems:'center', gap:'5px',
+                  }}
+                  title="Seleccionar cartas para imprimir en hoja A4"
+                >{printMode ? '✕ Cancelar' : '🖨️ Imprimir'}</button>
+
+                {/* ── Controles de impresión (solo en modo print) ── */}
+                {printMode && (
+                  <>
+                    <button onClick={toggleAll} style={{
+                      fontSize:'11px', padding:'4px 10px', borderRadius:'6px',
+                      border:'1px solid var(--border)', background:'var(--surface2)',
+                      color:'var(--text2)', cursor:'pointer', fontWeight:600,
+                    }}>
+                      {selectedIds.size === collection.length ? '⬜ Quitar todo' : '✅ Selec. todo'}
+                    </button>
+                    <button
+                      onClick={printSelected}
+                      disabled={selectedIds.size === 0}
+                      style={{
+                        fontSize:'12px', padding:'5px 14px', borderRadius:'6px', fontWeight:700,
+                        border:'none',
+                        background: selectedIds.size > 0 ? 'var(--accent)' : 'var(--border)',
+                        color: selectedIds.size > 0 ? '#000' : 'var(--text2)',
+                        cursor: selectedIds.size > 0 ? 'pointer' : 'not-allowed',
+                        transition:'all .15s',
+                      }}
+                    >🖨️ {selectedIds.size > 0 ? `Imprimir (${selectedIds.size})` : 'Imprimir'}</button>
+                  </>
+                )}
+
+                <button onClick={onClear} style={{
+                  fontSize:'11px', padding:'4px 10px', borderRadius:'6px',
+                  border:'1px solid var(--danger)', background:'rgba(224,85,85,.1)',
+                  color:'var(--danger)', cursor:'pointer', fontWeight:600,
+                }}>🗑 Vaciar</button>
+              </>
             )}
             <span style={{fontSize:'12px',color:'var(--text2)'}}>{collection.length} carta{collection.length !== 1 ? 's' : ''}</span>
             <button onClick={onClose} style={{
@@ -1665,6 +1759,29 @@ function ProxyCollectionModal({ collection, onClose, onRemove, onClear, onAdd })
                   >
                     <div className="proxy-coll-img-wrap" style={{position:'relative'}}>
                       <img className="proxy-coll-img" src={item.img} alt={item.name} />
+                      {/* Overlay de selección para impresión */}
+                      {printMode && (
+                        <div
+                          onClick={() => toggleSelect(item.id)}
+                          style={{
+                            position:'absolute', inset:0, cursor:'pointer', borderRadius:'9px',
+                            background: selectedIds.has(item.id) ? 'rgba(196,154,42,.22)' : 'rgba(0,0,0,.06)',
+                            border: `3px solid ${selectedIds.has(item.id) ? 'var(--accent)' : 'transparent'}`,
+                            display:'flex', alignItems:'flex-end', justifyContent:'flex-end',
+                            padding:'8px', transition:'all .15s', zIndex:10,
+                          }}
+                        >
+                          <div style={{
+                            width:'22px', height:'22px', borderRadius:'5px',
+                            background: selectedIds.has(item.id) ? 'var(--accent)' : 'rgba(0,0,0,.65)',
+                            border:`2px solid ${selectedIds.has(item.id) ? '#000' : 'rgba(255,255,255,.5)'}`,
+                            display:'flex', alignItems:'center', justifyContent:'center',
+                            fontSize:'13px', color:'#000', fontWeight:900, lineHeight:1,
+                          }}>
+                            {selectedIds.has(item.id) ? '✓' : ''}
+                          </div>
+                        </div>
+                      )}
                       <div className="proxy-badge-proxy">{item.isImported ? 'IMG' : 'PROXY'}</div>
                       {item.setCode && (
                         <div className="proxy-badge-set">{item.setCode.toUpperCase()}</div>
@@ -1675,8 +1792,8 @@ function ProxyCollectionModal({ collection, onClose, onRemove, onClear, onAdd })
                           {RARITY_SYMS[item.rarity] || '●'}
                         </div>
                       )}
-                      {/* Tooltip carta original al hacer hover */}
-                      {item.origCard && hoveredId === item.id && (
+                      {/* Tooltip carta original al hacer hover (oculto en modo impresión) */}
+                      {item.origCard && hoveredId === item.id && !printMode && (
                         <div style={{
                           position:'absolute', bottom:'calc(100% + 8px)', left:'50%',
                           transform:'translateX(-50%)',
@@ -1915,42 +2032,47 @@ function EditorSection() {
       });
   });
 
-  const resolveExternalImages = async (container) => {
-    const imgs = Array.from(container.querySelectorAll('img'));
-    await Promise.all(imgs.map(async img => {
-      const src = img.getAttribute('src') || '';
-      if (src && !src.startsWith('data:') && !src.startsWith('blob:')) {
-        const dataUrl = await toDataUrl(src);
-        if (dataUrl) img.src = dataUrl;
-        else img.style.visibility = 'hidden';
-      }
-      if (!img.complete || img.naturalWidth === 0) {
-        await new Promise(res => {
-          img.onload = res;
-          img.onerror = res;
-          setTimeout(res, 5000);
-        });
-      }
-    }));
-  };
+  // Convierte imgs con SVG data-URL a PNG (html2canvas no renderiza SVG correctamente)
+  const rasterizeSvgImages = (container) => new Promise(resolve => {
+    const svgImgs = Array.from(container.querySelectorAll('img'))
+      .filter(img => (img.getAttribute('src') || '').startsWith('data:image/svg+xml'));
+    if (!svgImgs.length) { resolve(new Map()); return; }
+    const origSrcs = new Map();
+    let pending = svgImgs.length;
+    svgImgs.forEach(img => {
+      const src = img.src;
+      origSrcs.set(img, src);
+      const w = img.offsetWidth  || 20;
+      const h = img.offsetHeight || 20;
+      const tmp = new Image();
+      tmp.onload = () => {
+        const c = document.createElement('canvas');
+        c.width = w; c.height = h;
+        c.getContext('2d').drawImage(tmp, 0, 0, w, h);
+        img.src = c.toDataURL('image/png');
+        if (--pending === 0) resolve(origSrcs);
+      };
+      tmp.onerror = () => { if (--pending === 0) resolve(origSrcs); };
+      tmp.src = src;
+    });
+  });
 
   const downloadCard = async () => {
     const el = document.getElementById('card-preview');
     if (!el) return;
     setDownloading(true);
 
-    const wrapper = document.createElement('div');
-    wrapper.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:244px;height:341px;overflow:visible;z-index:-9999;background:transparent;';
+    // Quitar el scale(1.5) del wrapper para que html2canvas capture a 244×341 nativo
+    const scaleEl = el.closest('.editor-card-scale');
+    const origTransform = scaleEl ? scaleEl.style.transform : null;
+    if (scaleEl) scaleEl.style.transform = 'none';
 
-    const clone = el.cloneNode(true);
-    clone.style.cssText += ';transform:none!important;position:relative!important;width:244px!important;height:341px!important;';
-    wrapper.appendChild(clone);
-    document.body.appendChild(wrapper);
-
+    let origSvgSrcs = new Map();
     try {
-      await resolveExternalImages(clone);
+      // SVG → PNG antes de html2canvas
+      origSvgSrcs = await rasterizeSvgImages(el);
 
-      const canvas = await html2canvas(wrapper, {
+      const canvas = await html2canvas(el, {
         scale: 3,
         useCORS: false,
         allowTaint: false,
@@ -1958,9 +2080,7 @@ function EditorSection() {
         logging: false,
         width: 244,
         height: 341,
-        windowWidth: 1280,
-        windowHeight: 900,
-        ignoreElements: el => el.classList && el.classList.contains('safe-zone-wrap'),
+        ignoreElements: e => e.classList && e.classList.contains('safe-zone-wrap'),
       });
 
       const url = canvas.toDataURL('image/png');
@@ -1974,7 +2094,9 @@ function EditorSection() {
       console.error('Download error:', err);
       alert('Error al exportar: ' + err.message);
     } finally {
-      if (wrapper.parentNode) document.body.removeChild(wrapper);
+      // Restaurar scale y srcs SVG originales
+      if (scaleEl && origTransform !== null) scaleEl.style.transform = origTransform;
+      for (const [img, src] of origSvgSrcs) img.src = src;
       setDownloading(false);
     }
   };
