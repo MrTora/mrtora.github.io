@@ -1384,14 +1384,14 @@ function FolderView({ collection, setCollection, showToast }) {
             ) : (
               <button
                 onClick={refreshPrices}
-                title={`Actualizar precios desde Scryfall · ${cardCacheSize()} cartas en caché`}
+                title={`Actualizar desde Scryfall · ${cardCacheSize()} cartas en caché`}
                 style={{
                   fontSize:'12px',padding:'6px 12px',borderRadius:'7px',
                   background:'transparent',border:'1px solid var(--border)',
                   color:'var(--text2)',cursor:'pointer',transition:'all .12s',fontFamily:'inherit',
                 }}
               >
-                🔄 Actualizar precios
+                🔄 Actualizar
               </button>
             )}
             <button className="btn btn-secondary" style={{fontSize:'12px',padding:'6px 12px'}} onClick={exportCSV}>📊 CSV</button>
@@ -1568,6 +1568,7 @@ function ImportDeckModal({ onClose, onImport }) {
   const [step, setStep] = useState(1);
   const [deckText, setDeckText] = useState('');
   const [deckName, setDeckName] = useState('');
+  const [deckFormat, setDeckFormat] = useState('');
   const [parsed, setParsed] = useState([]);
   const [error, setError] = useState('');
 
@@ -1588,7 +1589,7 @@ function ImportDeckModal({ onClose, onImport }) {
 
   const confirm = () => {
     if (!deckName.trim()) return;
-    onImport({ id: `deck-${Date.now()}`, name: deckName.trim(), entries: parsed });
+    onImport({ id: `deck-${Date.now()}`, name: deckName.trim(), format: deckFormat || null, entries: parsed });
     onClose();
   };
 
@@ -1638,6 +1639,24 @@ function ImportDeckModal({ onClose, onImport }) {
                 marginBottom:'14px', display:'block',
               }}
             />
+            <div style={{marginBottom:'16px'}}>
+              <div style={{fontSize:'12px',color:'var(--text2)',marginBottom:'8px',fontWeight:600}}>
+                🎮 Formato de juego <span style={{fontWeight:400,opacity:.7}}>(opcional — podrás cambiarlo después)</span>
+              </div>
+              <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(108px,1fr))',gap:'4px'}}>
+                {FORMAT_ORDER.map(([key, label]) => (
+                  <button key={key} onClick={() => setDeckFormat(f => f === key ? '' : key)}
+                    style={{
+                      padding:'5px 8px', borderRadius:'6px', fontSize:'11px', fontWeight:600,
+                      background: deckFormat === key ? 'var(--accent2)' : 'var(--surface2)',
+                      border: `1px solid ${deckFormat === key ? 'var(--accent2)' : 'var(--border)'}`,
+                      color: deckFormat === key ? '#fff' : 'var(--text2)',
+                      cursor:'pointer', transition:'all .12s',
+                    }}
+                  >{label}</button>
+                ))}
+              </div>
+            </div>
             <div style={{display:'flex',gap:'8px',justifyContent:'flex-end'}}>
               <button className="btn btn-secondary" onClick={() => setStep(1)}>← Atrás</button>
               <button className="btn btn-primary" onClick={confirm} disabled={!deckName.trim()}>✅ Crear Deck</button>
@@ -1650,13 +1669,19 @@ function ImportDeckModal({ onClose, onImport }) {
 }
 
 /* ─── DECK VIEW ─── */
-function DeckView({ deck, allCollectionCards, onReplaceEntry, onDeleteDeck, showToast }) {
+function DeckView({ deck, allCollectionCards, onReplaceEntry, onDeleteDeck, onUpdateFormat, showToast }) {
   const [cardData, setCardData] = useState({});
   const [loadingCards, setLoadingCards] = useState(true);
   const [loadProgress, setLoadProgress] = useState({ done: 0, total: 0, fromCache: 0 });
   const [refreshKey, setRefreshKey] = useState(0);
   const forceRefreshRef = useRef(false);
   const [replacingEntry, setReplacingEntry] = useState(null);
+  const [activeFormat, setActiveFormat] = useState(deck.format || '');
+
+  const handleFormatChange = fmt => {
+    setActiveFormat(fmt);
+    onUpdateFormat && onUpdateFormat(fmt);
+  };
 
 
   useEffect(() => {
@@ -1927,6 +1952,35 @@ function DeckView({ deck, allCollectionCards, onReplaceEntry, onDeleteDeck, show
       {/* ── Columna derecha: contenido ── */}
       <div style={{flex:1,minWidth:0,display:'flex',flexDirection:'column',gap:'16px'}}>
 
+      {/* ── Selector de formato activo ── */}
+      <div style={{background:'var(--surface)',border:'1px solid var(--border)',borderRadius:'12px',padding:'14px 16px'}}>
+        <div style={{
+          fontSize:'10px',fontWeight:700,color:'var(--text2)',textTransform:'uppercase',
+          letterSpacing:'.6px',marginBottom:'10px',fontFamily:"'Cinzel Decorative','Palatino Linotype',serif",
+          display:'flex',alignItems:'center',gap:'8px',
+        }}>
+          <span>🎮 Formato de juego</span>
+          {activeFormat && (
+            <span style={{marginLeft:'auto',fontSize:'10px',color:'var(--text2)',fontWeight:400}}>
+              Mostrando legalidad para <strong style={{color:'var(--accent)'}}>{FORMAT_ORDER.find(([k])=>k===activeFormat)?.[1]}</strong>
+            </span>
+          )}
+        </div>
+        <div style={{display:'flex',flexWrap:'wrap',gap:'4px'}}>
+          {FORMAT_ORDER.map(([key, label]) => (
+            <button key={key} onClick={() => handleFormatChange(activeFormat === key ? '' : key)}
+              style={{
+                padding:'4px 11px',borderRadius:'5px',fontSize:'11px',fontWeight:600,
+                background: activeFormat === key ? 'var(--accent2)' : 'var(--surface2)',
+                border: `1px solid ${activeFormat === key ? 'var(--accent2)' : 'var(--border)'}`,
+                color: activeFormat === key ? '#fff' : 'var(--text2)',
+                cursor:'pointer',transition:'all .12s',
+              }}
+            >{label}</button>
+          ))}
+        </div>
+      </div>
+
       {/* ── Panel de legalidad del deck por formato ── */}
       <div style={{
         background:'var(--surface)', border:'1px solid var(--border)',
@@ -2027,30 +2081,30 @@ function DeckView({ deck, allCollectionCards, onReplaceEntry, onDeleteDeck, show
             }
             <span className="stat-label">CMC promedio</span>
           </div>
+          {loadingCards ? (
+            <div style={{display:'flex',alignItems:'center',gap:'8px',color:'var(--text2)',fontSize:'12px'}}>
+              <div className="spinner"/>
+              <span>
+                {loadProgress.fromCache > 0
+                  ? `${loadProgress.done}/${loadProgress.total} · 💾 ${loadProgress.fromCache} en caché`
+                  : `Cargando ${loadProgress.done}/${loadProgress.total}…`
+                }
+              </span>
+            </div>
+          ) : (
+            <button
+              onClick={handleRefreshPrices}
+              title={`Actualizar · ${cardCacheSize()} cartas en caché`}
+              style={{
+                fontSize:'11px',padding:'5px 10px',borderRadius:'6px',
+                background:'transparent',border:'1px solid var(--border)',
+                color:'var(--text2)',cursor:'pointer',transition:'all .12s',
+              }}
+            >
+              🔄 Actualizar
+            </button>
+          )}
           <div style={{marginLeft:'auto',display:'flex',alignItems:'center',gap:'8px',flexWrap:'wrap'}}>
-            {loadingCards ? (
-              <div style={{display:'flex',alignItems:'center',gap:'8px',color:'var(--text2)',fontSize:'12px'}}>
-                <div className="spinner"/>
-                <span>
-                  {loadProgress.fromCache > 0
-                    ? `${loadProgress.done}/${loadProgress.total} · 💾 ${loadProgress.fromCache} en caché`
-                    : `Cargando ${loadProgress.done}/${loadProgress.total}…`
-                  }
-                </span>
-              </div>
-            ) : (
-              <button
-                onClick={handleRefreshPrices}
-                title={`Actualizar precios · ${cardCacheSize()} cartas en caché`}
-                style={{
-                  fontSize:'11px',padding:'5px 10px',borderRadius:'6px',
-                  background:'transparent',border:'1px solid var(--border)',
-                  color:'var(--text2)',cursor:'pointer',transition:'all .12s',
-                }}
-              >
-                🔄 Actualizar precios
-              </button>
-            )}
             <button
               className="btn btn-secondary"
               style={{fontSize:'13px',padding:'8px 16px',borderColor:'var(--accent2)',color:'var(--accent2)'}}
@@ -2074,15 +2128,6 @@ function DeckView({ deck, allCollectionCards, onReplaceEntry, onDeleteDeck, show
                 onClick={() => setShowShoppingList(s => !s)}
               >
                 🛒 {showShoppingList ? 'Ocultar' : `Faltantes (${deck.entries.filter(e => getOwnedInfo(e).count < e.qty).length})`}
-              </button>
-            )}
-            {onDeleteDeck && (
-              <button
-                className="btn btn-secondary"
-                style={{fontSize:'13px',padding:'8px 16px',borderColor:'var(--danger)',color:'var(--danger)'}}
-                onClick={() => { if (window.confirm(`¿Eliminar el deck "${deck.name}"?`)) onDeleteDeck(); }}
-              >
-                🗑 Eliminar deck
               </button>
             )}
           </div>
@@ -2405,6 +2450,24 @@ function DeckView({ deck, allCollectionCards, onReplaceEntry, onDeleteDeck, show
                         {entry.name}
                       </span>
                       {mc && <ManaCost cost={mc} size={12} />}
+                      {activeFormat && !loadingCards && (() => {
+                        const fmtStatus = cardData[entry.name]?.legalities?.[activeFormat] || 'not_legal';
+                        const fb = LEGALITY_BADGE[fmtStatus] || LEGALITY_BADGE.not_legal;
+                        const fmtOk = fmtStatus === 'legal' || fmtStatus === 'restricted';
+                        return (
+                          <span style={{
+                            display:'inline-flex',alignItems:'center',gap:'3px',
+                            padding:'1px 6px',borderRadius:'4px',flexShrink:0,
+                            background: fb.bg, border:`1px solid ${fb.border}`,
+                            fontSize:'9px',fontWeight:800,color:fb.textColor,
+                            textTransform:'uppercase',letterSpacing:'.3px',
+                          }}
+                            title={`${FORMAT_ORDER.find(([k])=>k===activeFormat)?.[1]}: ${fb.label}`}
+                          >
+                            {fmtOk ? '✓' : '✗'} {fb.label}
+                          </span>
+                        );
+                      })()}
                     </div>
                     <div style={{fontSize:'10px',color:'var(--text2)',marginTop:'1px',display:'flex',gap:'6px',alignItems:'center'}}>
                       <span>{entry.set} #{entry.number}</span>
@@ -2681,25 +2744,32 @@ function CollectionSection({ showToast }) {
                     <div className="folder-tab-name">{d.name}</div>
                     <div className="folder-tab-count" style={{color:pctColor,fontWeight:700}}>{pct}% · {totalCards} cartas</div>
                   </div>
-                  <div className="folder-tab-actions">
-                    <button className="folder-action-btn" title="Exportar deck (formato MTGA)" onClick={e=>{
-                      e.stopPropagation();
-                      const lines = ['Deck', ...d.entries.map(e => `${e.qty} ${e.name} (${e.set}) ${e.number}`)];
-                      const blob = new Blob([lines.join('\n')], { type: 'text/plain' });
-                      const a = document.createElement('a');
-                      a.href = URL.createObjectURL(blob);
-                      a.download = `${d.name.replace(/\s+/g,'-').toLowerCase()}.txt`;
-                      a.click();
-                      URL.revokeObjectURL(a.href);
-                    }}>📤</button>
-                    <button className="folder-action-btn danger" title="Eliminar deck" onClick={e=>{e.stopPropagation();deleteDeck(d.id);}}>🗑</button>
-                  </div>
                 </div>
               );
             })}
             <button className="new-folder-btn" onClick={() => setShowImportDeck(true)}>
               📥 Importar Deck
             </button>
+            {activeDeck && (<>
+              <button className="new-folder-btn" title="Exportar deck activo (formato MTGA)" onClick={() => {
+                const lines = ['Deck', ...activeDeck.entries.map(e => `${e.qty} ${e.name} (${e.set}) ${e.number}`)];
+                const blob = new Blob([lines.join('\n')], { type: 'text/plain' });
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(blob);
+                a.download = `${activeDeck.name.replace(/\s+/g,'-').toLowerCase()}.txt`;
+                a.click();
+                URL.revokeObjectURL(a.href);
+              }}>
+                📤 Exportar
+              </button>
+              <button className="new-folder-btn" style={{borderColor:'rgba(224,85,85,.5)',color:'var(--danger)'}}
+                onClick={() => {
+                  if (window.confirm(`¿Eliminar el deck "${activeDeck.name}"?\n\nEsta acción no se puede deshacer.`)) deleteDeck(activeDeck.id);
+                }}
+              >
+                🗑 Eliminar deck
+              </button>
+            </>)}
           </div>
 
           {activeDeck ? (
@@ -2720,6 +2790,11 @@ function CollectionSection({ showToast }) {
                 showToast(`🔄 ${entryName} → ${newSet}`);
               }}
               onDeleteDeck={() => deleteDeck(activeDeck.id)}
+              onUpdateFormat={fmt => {
+                setDecks(prev => prev.map(d =>
+                  d.id !== activeDeck.id ? d : { ...d, format: fmt || null }
+                ));
+              }}
             />
           ) : (
             <div className="empty-state">
