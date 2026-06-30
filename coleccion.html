@@ -522,6 +522,17 @@
     .frame-custom-label,
     .preview-label { font-size: 10px; letter-spacing: .3px; }
 
+    @media (max-width: 640px) {
+      .main { padding: 14px 10px; }
+      .stats-bar { padding: 10px 12px; gap: 10px; }
+      .filter-bar { padding: 10px 12px; }
+      .deck-section-header { padding: 8px 12px; }
+      .header { padding: 0 12px; gap: 10px; }
+      .header-logo { font-size: 13px; }
+      .folders-bar { gap: 6px; }
+      .folder-tab { min-width: 110px; padding: 7px 10px; }
+    }
+
     @media print {
       @page { size: A4; margin: 8mm; }
       body { background: white; }
@@ -1211,6 +1222,7 @@ function FolderView({ collection, setCollection, showToast }) {
   const [fTypes, setFTypes] = useState([]);
   const [fFoil, setFFoil] = useState('all');
   const [fRarity, setFRarity] = useState([]);
+  const [fSet, setFSet] = useState('');
   const [collSearch, setCollSearch] = useState('');
   const [sortBy, setSortBy] = useState('name-asc');
   const timer = useRef();
@@ -1314,8 +1326,8 @@ function FolderView({ collection, setCollection, showToast }) {
   const toggleColor  = id => setFColors(prev =>  prev.includes(id) ? prev.filter(x=>x!==id) : [...prev,id]);
   const toggleType   = id => setFTypes(prev =>   prev.includes(id) ? prev.filter(x=>x!==id) : [...prev,id]);
   const toggleRarity = id => setFRarity(prev =>  prev.includes(id) ? prev.filter(x=>x!==id) : [...prev,id]);
-  const clearAll = () => { setFColors([]); setFTypes([]); setFFoil('all'); setFRarity([]); setCollSearch(''); setSortBy('name-asc'); };
-  const hasFilters = fColors.length > 0 || fTypes.length > 0 || fFoil !== 'all' || fRarity.length > 0 || collSearch.trim() !== '';
+  const clearAll = () => { setFColors([]); setFTypes([]); setFFoil('all'); setFRarity([]); setFSet(''); setCollSearch(''); setSortBy('name-asc'); };
+  const hasFilters = fColors.length > 0 || fTypes.length > 0 || fFoil !== 'all' || fRarity.length > 0 || fSet !== '' || collSearch.trim() !== '';
 
   const displayed = collection
     .filter(c => {
@@ -1346,6 +1358,8 @@ function FolderView({ collection, setCollection, showToast }) {
       if (fRarity.length > 0) {
         if (!fRarity.includes(c.rarity)) return false;
       }
+      // set filter
+      if (fSet && c.setCode !== fSet) return false;
       return true;
     })
     .sort((a, b) => {
@@ -1361,18 +1375,44 @@ function FolderView({ collection, setCollection, showToast }) {
 
   const totalCopies = collection.reduce((a,c) => a+c.count, 0);
   const totalValue  = collection.reduce((a,c) => a + cardPrice(c) * c.count, 0);
+  const filteredCopies = displayed.reduce((a,c) => a+c.count, 0);
+  const filteredValue  = displayed.reduce((a,c) => a + cardPrice(c) * c.count, 0);
   const fallbackImg = () => `data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='140' height='196'><rect width='140' height='196' rx='8' fill='%23333'/><text x='70' y='98' text-anchor='middle' fill='%23888' font-size='11'>Sin imagen</text></svg>`;
 
   return (
     <div>
       {/* Stats */}
       <div className="stats-bar">
-        <div className="stat-item"><span className="stat-value">{collection.length}</span><span className="stat-label">Entradas</span></div>
-        <div className="stat-item"><span className="stat-value">{totalCopies}</span><span className="stat-label">Copias totales</span></div>
         <div className="stat-item">
-          <span className="stat-value">€{totalValue.toFixed(2)}</span>
-          {eurClpRate && <span className="stat-value" style={{fontSize:'13px',color:'var(--text2)',marginLeft:'6px'}}>/ ${Math.round(totalValue * eurClpRate).toLocaleString('es-CL')} CLP</span>}
-          <span className="stat-label">Valor total</span>
+          <span className="stat-value">
+            {hasFilters && displayed.length !== collection.length
+              ? <>{displayed.length} <span style={{fontSize:'14px',color:'var(--text2)',fontWeight:400}}>/ {collection.length}</span></>
+              : collection.length}
+          </span>
+          <span className="stat-label">Entradas</span>
+        </div>
+        <div className="stat-item">
+          <span className="stat-value">
+            {hasFilters && displayed.length !== collection.length
+              ? <>{filteredCopies} <span style={{fontSize:'14px',color:'var(--text2)',fontWeight:400}}>/ {totalCopies}</span></>
+              : totalCopies}
+          </span>
+          <span className="stat-label">Copias totales</span>
+        </div>
+        <div className="stat-item">
+          {hasFilters && displayed.length !== collection.length ? (
+            <>
+              <span className="stat-value">€{filteredValue.toFixed(2)}</span>
+              {eurClpRate && <span className="stat-value" style={{fontSize:'13px',color:'var(--text2)',marginLeft:'6px'}}>/ ${Math.round(filteredValue * eurClpRate).toLocaleString('es-CL')} CLP</span>}
+              <span className="stat-label">Valor filtrado <span style={{color:'var(--text2)',fontWeight:400}}>/ €{totalValue.toFixed(2)} total</span></span>
+            </>
+          ) : (
+            <>
+              <span className="stat-value">€{totalValue.toFixed(2)}</span>
+              {eurClpRate && <span className="stat-value" style={{fontSize:'13px',color:'var(--text2)',marginLeft:'6px'}}>/ ${Math.round(totalValue * eurClpRate).toLocaleString('es-CL')} CLP</span>}
+              <span className="stat-label">Valor total</span>
+            </>
+          )}
         </div>
         {collection.length > 0 && (
           <div style={{marginLeft:'auto',display:'flex',gap:'8px',alignItems:'center',flexWrap:'wrap'}}>
@@ -1477,7 +1517,34 @@ function FolderView({ collection, setCollection, showToast }) {
             ))}
           </div>
 
-          {/* Row 3: Types + Sort */}
+          {/* Row 3: Edition */}
+          {(() => {
+            const sets = [...new Map(collection.map(c => [c.setCode, { code: c.setCode, name: c.setName }])).values()]
+              .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+            return (
+              <div className="filter-row">
+                <span className="filter-label">Edición</span>
+                <select
+                  className="sort-select"
+                  style={{ maxWidth: '320px', flex: '0 1 auto' }}
+                  value={fSet}
+                  onChange={e => setFSet(e.target.value)}
+                >
+                  <option value="">— Todas —</option>
+                  {sets.map(s => (
+                    <option key={s.code} value={s.code}>
+                      {s.name} ({s.code})
+                    </option>
+                  ))}
+                </select>
+                {fSet && (
+                  <button className="filter-clear" style={{ marginLeft: '6px' }} onClick={() => setFSet('')}>✕</button>
+                )}
+              </div>
+            );
+          })()}
+
+          {/* Row 4: Types + Sort */}
           <div className="filter-row">
             <span className="filter-label">Tipo</span>
             {TYPE_OPTIONS.map(to => (
@@ -1669,7 +1736,18 @@ function ImportDeckModal({ onClose, onImport }) {
 }
 
 /* ─── DECK VIEW ─── */
+function useIsMobile(bp = 640) {
+  const [mobile, setMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < bp);
+  useEffect(() => {
+    const fn = () => setMobile(window.innerWidth < bp);
+    window.addEventListener('resize', fn);
+    return () => window.removeEventListener('resize', fn);
+  }, [bp]);
+  return mobile;
+}
+
 function DeckView({ deck, allCollectionCards, onReplaceEntry, onDeleteDeck, onUpdateFormat, showToast }) {
+  const isMobile = useIsMobile();
   const [cardData, setCardData] = useState({});
   const [loadingCards, setLoadingCards] = useState(true);
   const [loadProgress, setLoadProgress] = useState({ done: 0, total: 0, fromCache: 0 });
@@ -1907,8 +1985,8 @@ function DeckView({ deck, allCollectionCards, onReplaceEntry, onDeleteDeck, onUp
   return (
     <div style={{display:'flex',gap:'20px',alignItems:'flex-start'}}>
 
-      {/* ── Columna izquierda: preview sticky ── */}
-      <div style={{width:'220px',flexShrink:0,position:'sticky',top:'88px'}}>
+      {/* ── Columna izquierda: preview sticky (solo escritorio) ── */}
+      {!isMobile && <div style={{width:'220px',flexShrink:0,position:'sticky',top:'88px'}}>
         <div style={{
           borderRadius:'12px',overflow:'hidden',
           background:'var(--surface)',border:'1px solid var(--border)',
@@ -1947,7 +2025,7 @@ function DeckView({ deck, allCollectionCards, onReplaceEntry, onDeleteDeck, onUp
             </div>
           )}
         </div>
-      </div>
+      </div>}
 
       {/* ── Columna derecha: contenido ── */}
       <div style={{flex:1,minWidth:0,display:'flex',flexDirection:'column',gap:'16px'}}>
@@ -2054,39 +2132,41 @@ function DeckView({ deck, allCollectionCards, onReplaceEntry, onDeleteDeck, onUp
 
       {/* Completion stats + value */}
       <div className="stats-bar" style={{flexDirection:'column',gap:'12px'}}>
-        <div style={{display:'flex',gap:'24px',flexWrap:'wrap',alignItems:'center'}}>
+        <div style={{display:'flex',gap: isMobile ? '12px' : '24px',flexWrap:'wrap',alignItems:'center'}}>
           <div className="stat-item">
-            <span className="stat-value" style={{fontSize:'28px',color:pctColor}}>{pct}%</span>
-            <span className="stat-label">Completitud del mazo</span>
+            <span className="stat-value" style={{fontSize: isMobile ? '22px' : '28px',color:pctColor}}>{pct}%</span>
+            <span className="stat-label">Completitud</span>
           </div>
           <div className="stat-item">
-            <span className="stat-value">{totalOwned}/{totalNeeded}</span>
-            <span className="stat-label">Copias disponibles</span>
+            <span className="stat-value" style={{fontSize: isMobile ? '18px' : '22px'}}>{totalOwned}/{totalNeeded}</span>
+            <span className="stat-label">Copias</span>
           </div>
           <div className="stat-item">
-            <span className="stat-value">{uniqueOwned}/{uniqueNeeded}</span>
-            <span className="stat-label">Cartas completas</span>
+            <span className="stat-value" style={{fontSize: isMobile ? '18px' : '22px'}}>{uniqueOwned}/{uniqueNeeded}</span>
+            <span className="stat-label">Completas</span>
           </div>
           <div className="stat-item">
             {totalValue !== null
-              ? <span className="stat-value" style={{color:'#4ade80'}}>€{totalValue.toFixed(2)}</span>
+              ? <span className="stat-value" style={{color:'#4ade80',fontSize: isMobile ? '18px' : '22px'}}>€{totalValue.toFixed(2)}</span>
               : <span className="stat-value" style={{color:'var(--text2)',fontSize:'16px'}}>…</span>
             }
-            <span className="stat-label">Valor total del deck</span>
+            <span className="stat-label">Valor deck</span>
           </div>
-          <div className="stat-item">
-            {avgCmc !== null
-              ? <span className="stat-value" style={{color:'var(--accent)'}}>{avgCmc}</span>
-              : <span className="stat-value" style={{color:'var(--text2)',fontSize:'16px'}}>…</span>
-            }
-            <span className="stat-label">CMC promedio</span>
-          </div>
+          {!isMobile && (
+            <div className="stat-item">
+              {avgCmc !== null
+                ? <span className="stat-value" style={{color:'var(--accent)'}}>{avgCmc}</span>
+                : <span className="stat-value" style={{color:'var(--text2)',fontSize:'16px'}}>…</span>
+              }
+              <span className="stat-label">CMC promedio</span>
+            </div>
+          )}
           {loadingCards ? (
             <div style={{display:'flex',alignItems:'center',gap:'8px',color:'var(--text2)',fontSize:'12px'}}>
               <div className="spinner"/>
               <span>
                 {loadProgress.fromCache > 0
-                  ? `${loadProgress.done}/${loadProgress.total} · 💾 ${loadProgress.fromCache} en caché`
+                  ? `${loadProgress.done}/${loadProgress.total} · 💾 ${loadProgress.fromCache} caché`
                   : `Cargando ${loadProgress.done}/${loadProgress.total}…`
                 }
               </span>
@@ -2101,39 +2181,53 @@ function DeckView({ deck, allCollectionCards, onReplaceEntry, onDeleteDeck, onUp
                 color:'var(--text2)',cursor:'pointer',transition:'all .12s',
               }}
             >
-              🔄 Actualizar
+              🔄
             </button>
           )}
-          <div style={{marginLeft:'auto',display:'flex',alignItems:'center',gap:'8px',flexWrap:'wrap'}}>
-            <button
-              className="btn btn-secondary"
-              style={{fontSize:'13px',padding:'8px 16px',borderColor:'var(--accent2)',color:'var(--accent2)'}}
-              onClick={drawHand}
-              disabled={deck.entries.length === 0 || loadingCards}
-            >
-              🎲 Mano aleatoria
-            </button>
-            <button
-              className="btn btn-secondary"
-              style={{fontSize:'13px',padding:'8px 16px'}}
-              onClick={exportDeck}
-              title="Exportar en formato MTGA"
-            >
-              📤 Exportar
-            </button>
-            {!loadingCards && deck.entries.some(e => getOwnedInfo(e).count < e.qty) && (
-              <button
-                className="btn btn-secondary"
-                style={{fontSize:'13px',padding:'8px 16px',borderColor:'#f97316',color: showShoppingList ? '#fff' : '#f97316', background: showShoppingList ? '#f97316' : 'transparent'}}
-                onClick={() => setShowShoppingList(s => !s)}
-              >
-                🛒 {showShoppingList ? 'Ocultar' : `Faltantes (${deck.entries.filter(e => getOwnedInfo(e).count < e.qty).length})`}
-              </button>
-            )}
-          </div>
         </div>
+        {/* Barra de progreso */}
         <div className="deck-progress-bar">
           <div className="deck-progress-fill" style={{width:`${pct}%`,background:pctColor}} />
+        </div>
+        {/* Botones de acción */}
+        <div style={{display:'flex',alignItems:'center',gap:'6px',flexWrap:'wrap'}}>
+          <button
+            className="btn btn-secondary"
+            style={{fontSize: isMobile ? '12px' : '13px', padding: isMobile ? '7px 10px' : '8px 16px', borderColor:'var(--accent2)',color:'var(--accent2)', flex: isMobile ? '1 1 0' : 'none'}}
+            onClick={drawHand}
+            disabled={deck.entries.length === 0 || loadingCards}
+          >
+            🎲 {isMobile ? 'Mano' : 'Mano aleatoria'}
+          </button>
+          <button
+            className="btn btn-secondary"
+            style={{fontSize: isMobile ? '12px' : '13px', padding: isMobile ? '7px 10px' : '8px 16px', flex: isMobile ? '1 1 0' : 'none'}}
+            onClick={exportDeck}
+            title="Exportar en formato MTGA"
+          >
+            📤 {isMobile ? 'Exportar' : 'Exportar'}
+          </button>
+          {!loadingCards && deck.entries.some(e => getOwnedInfo(e).count < e.qty) && (
+            <button
+              className="btn btn-secondary"
+              style={{
+                fontSize: isMobile ? '12px' : '13px',
+                padding: isMobile ? '7px 10px' : '8px 16px',
+                borderColor:'#f97316',
+                color: showShoppingList ? '#fff' : '#f97316',
+                background: showShoppingList ? '#f97316' : 'transparent',
+                flex: isMobile ? '1 1 0' : 'none',
+              }}
+              onClick={() => setShowShoppingList(s => !s)}
+            >
+              🛒 {showShoppingList ? 'Ocultar' : `Faltantes (${deck.entries.filter(e => getOwnedInfo(e).count < e.qty).length})`}
+            </button>
+          )}
+          {isMobile && avgCmc !== null && (
+            <span style={{fontSize:'12px',color:'var(--text2)',marginLeft:'auto'}}>
+              CMC Ø <strong style={{color:'var(--accent)'}}>{avgCmc}</strong>
+            </span>
+          )}
         </div>
       </div>
 
@@ -2427,84 +2521,104 @@ function DeckView({ deck, allCollectionCards, onReplaceEntry, onDeleteDeck, onUp
               const price  = cardData[entry.name]?.priceEur;
               const rowVal = price ? (parseFloat(price) * entry.qty).toFixed(2) : null;
               return (
-                <div key={`${entry.name}-${entry.set}`} className="deck-card-row" style={{background:rowBg}}
-                  onMouseEnter={e => showCardPreview(e, entry.name)}
-                  onMouseLeave={hideCardPreview}
+                <div key={`${entry.name}-${entry.set}`} className="deck-card-row"
+                  style={{background:rowBg, padding: isMobile ? '7px 10px' : '8px 16px', gap: isMobile ? '7px' : '12px'}}
+                  onMouseEnter={e => !isMobile && showCardPreview(e, entry.name)}
+                  onMouseLeave={() => !isMobile && hideCardPreview()}
                 >
                   {/* Qty badge */}
                   <div style={{
-                    flexShrink:0,width:'22px',textAlign:'center',
-                    fontSize:'13px',fontWeight:700,color:'var(--text2)',
+                    flexShrink:0, width: isMobile ? '18px' : '22px', textAlign:'center',
+                    fontSize: isMobile ? '12px' : '13px', fontWeight:700, color:'var(--text2)',
                   }}>
                     {entry.qty}
                   </div>
                   <img
                     src={img || fallbackImg}
                     alt={entry.name}
-                    style={{width:'36px',height:'50px',objectFit:'cover',borderRadius:'4px',flexShrink:0,background:'var(--surface2)'}}
+                    style={{
+                      width: isMobile ? '28px' : '36px',
+                      height: isMobile ? '39px' : '50px',
+                      objectFit:'cover', borderRadius:'4px', flexShrink:0, background:'var(--surface2)',
+                    }}
                     onError={e => { e.target.src = fallbackImg; }}
                   />
                   <div style={{flex:1,minWidth:0}}>
-                    <div style={{display:'flex',alignItems:'center',gap:'6px',flexWrap:'wrap'}}>
-                      <span style={{fontWeight:600,fontSize:'13px',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>
+                    <div style={{display:'flex',alignItems:'center',gap:'4px',flexWrap:'nowrap',overflow:'hidden'}}>
+                      <span style={{fontWeight:600, fontSize: isMobile ? '12px' : '13px', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>
                         {entry.name}
                       </span>
-                      {mc && <ManaCost cost={mc} size={12} />}
+                      {!isMobile && mc && <ManaCost cost={mc} size={12} />}
                       {activeFormat && !loadingCards && (() => {
                         const fmtStatus = cardData[entry.name]?.legalities?.[activeFormat] || 'not_legal';
                         const fb = LEGALITY_BADGE[fmtStatus] || LEGALITY_BADGE.not_legal;
                         const fmtOk = fmtStatus === 'legal' || fmtStatus === 'restricted';
                         return (
                           <span style={{
-                            display:'inline-flex',alignItems:'center',gap:'3px',
-                            padding:'1px 6px',borderRadius:'4px',flexShrink:0,
+                            display:'inline-flex',alignItems:'center',gap:'2px',
+                            padding:'1px 5px',borderRadius:'4px',flexShrink:0,
                             background: fb.bg, border:`1px solid ${fb.border}`,
                             fontSize:'9px',fontWeight:800,color:fb.textColor,
                             textTransform:'uppercase',letterSpacing:'.3px',
                           }}
                             title={`${FORMAT_ORDER.find(([k])=>k===activeFormat)?.[1]}: ${fb.label}`}
                           >
-                            {fmtOk ? '✓' : '✗'} {fb.label}
+                            {fmtOk ? '✓' : '✗'}{!isMobile && ` ${fb.label}`}
                           </span>
                         );
                       })()}
                     </div>
-                    <div style={{fontSize:'10px',color:'var(--text2)',marginTop:'1px',display:'flex',gap:'6px',alignItems:'center'}}>
-                      <span>{entry.set} #{entry.number}</span>
-                      {tl && <span style={{opacity:.6}}>{tl.split('—')[0].trim()}</span>}
+                    <div style={{fontSize:'10px',color:'var(--text2)',marginTop:'1px',display:'flex',gap:'5px',alignItems:'center',flexWrap:'nowrap',overflow:'hidden'}}>
+                      {isMobile ? (
+                        <>
+                          {rowVal && <span style={{color:'#4ade80',fontWeight:700}}>€{rowVal}</span>}
+                          {mc && <ManaCost cost={mc} size={10} />}
+                        </>
+                      ) : (
+                        <>
+                          <span>{entry.set} #{entry.number}</span>
+                          {tl && <span style={{opacity:.6}}>{tl.split('—')[0].trim()}</span>}
+                        </>
+                      )}
                     </div>
                     {hasDifferentEdition && (
-                      <div style={{fontSize:'10px',color:'var(--accent)',marginTop:'2px'}}>
-                        📦 Tienes: {displayCard.setCode}{displayCard.setName ? ` · ${displayCard.setName.slice(0,22)}` : ''}
+                      <div style={{fontSize:'10px',color:'var(--accent)',marginTop:'2px',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>
+                        📦 {displayCard.setCode}{!isMobile && displayCard.setName ? ` · ${displayCard.setName.slice(0,22)}` : ''}
                       </div>
                     )}
                   </div>
-                  {/* Price column */}
-                  <div style={{textAlign:'right',flexShrink:0,minWidth:'52px'}}>
-                    {rowVal ? (
-                      <>
-                        <div style={{fontSize:'11px',fontWeight:700,color:'#4ade80'}}>€{rowVal}</div>
-                        {entry.qty > 1 && <div style={{fontSize:'9px',color:'var(--text2)'}}>€{parseFloat(price).toFixed(2)}×{entry.qty}</div>}
-                      </>
-                    ) : (
-                      <div style={{fontSize:'11px',color:'var(--text2)'}}>—</div>
+                  {/* Price column (solo escritorio) */}
+                  {!isMobile && (
+                    <div style={{textAlign:'right',flexShrink:0,minWidth:'52px'}}>
+                      {rowVal ? (
+                        <>
+                          <div style={{fontSize:'11px',fontWeight:700,color:'#4ade80'}}>€{rowVal}</div>
+                          {entry.qty > 1 && <div style={{fontSize:'9px',color:'var(--text2)'}}>€{parseFloat(price).toFixed(2)}×{entry.qty}</div>}
+                        </>
+                      ) : (
+                        <div style={{fontSize:'11px',color:'var(--text2)'}}>—</div>
+                      )}
+                    </div>
+                  )}
+                  {/* Owned column */}
+                  <div style={{textAlign:'right',flexShrink:0,minWidth: isMobile ? '38px' : '52px'}}>
+                    <div style={{fontSize: isMobile ? '13px' : '14px',fontWeight:700,color:statusColor}}>{owned}/{needed}</div>
+                    {!isMobile && (
+                      <div style={{fontSize:'10px',color:'var(--text2)'}}>
+                        {complete ? 'Completa' : partial ? 'Parcial' : 'Falta'}
+                      </div>
                     )}
                   </div>
-                  {/* Owned column */}
-                  <div style={{textAlign:'right',flexShrink:0,minWidth:'52px'}}>
-                    <div style={{fontSize:'14px',fontWeight:700,color:statusColor}}>{owned}/{needed}</div>
-                    <div style={{fontSize:'10px',color:'var(--text2)'}}>
-                      {complete ? 'Completa' : partial ? 'Parcial' : 'Falta'}
-                    </div>
-                  </div>
-                  <div style={{fontSize:'16px',flexShrink:0,width:'20px',textAlign:'center'}}>
+                  <div style={{fontSize: isMobile ? '14px' : '16px',flexShrink:0,width:'18px',textAlign:'center'}}>
                     {complete ? '✅' : partial ? '⚠️' : '❌'}
                   </div>
                   <button
                     onClick={e => { e.stopPropagation(); setReplacingEntry(entry); }}
                     title="Cambiar edición de esta carta en el deck"
                     style={{
-                      fontSize:'10px', padding:'3px 7px', borderRadius:'5px', flexShrink:0,
+                      fontSize: isMobile ? '14px' : '10px',
+                      padding: isMobile ? '4px 6px' : '3px 7px',
+                      borderRadius:'5px', flexShrink:0,
                       background:'var(--surface2)', border:'1px solid var(--border)',
                       color:'var(--text2)', cursor:'pointer', lineHeight:1.4,
                       transition:'border-color .12s, color .12s',
@@ -2512,7 +2626,7 @@ function DeckView({ deck, allCollectionCards, onReplaceEntry, onDeleteDeck, onUp
                     onMouseEnter={e=>{e.currentTarget.style.borderColor='var(--accent2)';e.currentTarget.style.color='var(--text)';}}
                     onMouseLeave={e=>{e.currentTarget.style.borderColor='var(--border)';e.currentTarget.style.color='var(--text2)';}}
                   >
-                    🔄<br/>Cambiar
+                    {isMobile ? '🔄' : <span>🔄<br/>Cambiar</span>}
                   </button>
                 </div>
               );
