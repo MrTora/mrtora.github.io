@@ -1427,59 +1427,127 @@ function DeckSelect({ conn, isHost, onStart, onBack }) {
    LOBBY SCREEN
 ═══════════════════════════════════════════════ */
 function Lobby({ onConnected, onSolo }) {
-  const [mode, setMode] = useState(null); // null | 'host' | 'joining' | 'join'
-  const [code, setCode] = useState('');
+  const [mode, setMode]       = useState(null); // null | 'host' | 'joining' | 'join'
+  const [code, setCode]       = useState('');
   const [joinCode, setJoinCode] = useState('');
-  const [status, setStatus] = useState('');
-  const [error, setError] = useState('');
-  const peerRef = useRef(null);
+  const [status, setStatus]   = useState('');
+  const [error, setError]     = useState('');
+  const [retries, setRetries] = useState(0);
+  const [copied, setCopied]   = useState(false);
+  const peerRef    = useRef(null);
+  const cancelRef  = useRef(false); // prevent state updates after cancel
+  const MAX_RETRIES = 6;
+  const RETRY_MS    = 2500;
 
-  useEffect(() => () => { if (peerRef.current) try { peerRef.current.destroy(); } catch {} }, []);
+  useEffect(() => () => {
+    cancelRef.current = true;
+    if (peerRef.current) try { peerRef.current.destroy(); } catch {}
+  }, []);
 
+  /* ── HOST ── */
   const createGame = () => {
-    setError('');
+    setError(''); cancelRef.current = false;
     const roomCode = Math.random().toString(36).slice(2, 8).toUpperCase();
-    setCode(roomCode);
-    setMode('host');
-    setStatus('Conectando…');
-    const p = new Peer(`kazagame-${roomCode}`);
+    setCode(roomCode); setMode('host'); setStatus('Registrando sala…');
+    const p = new Peer(`kazagame-${roomCode}`, { debug: 0 });
     peerRef.current = p;
-    p.on('open', () => setStatus('Esperando oponente…'));
+    p.on('open', () => { if (!cancelRef.current) setStatus('Sala lista — comparte el código'); });
     p.on('error', err => {
-      if (err.type === 'unavailable-id') { setError('Código ocupado. Reintenta.'); setMode(null); }
-      else setError(`Error: ${err.type}`);
+      if (cancelRef.current) return;
+      if (err.type === 'unavailable-id') { setError('Código ocupado, intenta de nuevo.'); setMode(null); }
+      else { setError(`Error PeerJS: ${err.type}`); }
     });
     p.on('connection', c => {
-      c.on('open', () => { setStatus('¡Conectado!'); setTimeout(() => onConnected(c, true), 500); });
-      c.on('error', () => setError('Error de conexión'));
+      c.on('open', () => {
+        if (cancelRef.current) return;
+        setStatus('¡Conectado!');
+        setTimeout(() => onConnected(c, true), 400);
+      });
+      c.on('error', () => { if (!cancelRef.current) setError('Error en la conexión entrante.'); });
     });
   };
 
-  const joinGame = () => {
-    if (!joinCode.trim()) return;
-    setError('');
-    setMode('join');
-    setStatus('Conectando…');
-    const p = new Peer();
+  /* ── JOIN (con reintentos automáticos) ── */
+  const doJoin = (attempt = 0) => {
+    if (cancelRef.current) return;
+    setRetries(attempt);
+    setStatus(attempt === 0 ? 'Buscando sala…' : `Reintentando… (${attempt}/${MAX_RETRIES})`);
+
+    // Destroy previous peer before creating a new one
+    if (peerRef.current) { try { peerRef.current.destroy(); } catch {} peerRef.current = null; }
+
+    const p = new Peer({ debug: 0 });
     peerRef.current = p;
+    let done = false;
+
+    // Timeout: if open+connect takes too long, retry
+    const giveUp = setTimeout(() => {
+      if (done || cancelRef.current) return;
+      done = true;
+      p.destroy();
+      if (attempt < MAX_RETRIES) { doJoin(attempt + 1); }
+      else { setError('No se pudo conectar tras varios intentos. Verifica el código.'); setMode('joining'); }
+    }, 7000);
+
     p.on('open', () => {
-      const c = p.connect(`kazagame-${joinCode.trim().toUpperCase()}`, { reliable: true });
-      c.on('open', () => { setStatus('¡Conectado!'); setTimeout(() => onConnected(c, false), 500); });
-      c.on('error', () => setError('No se pudo conectar. Verifica el código.'));
+      if (cancelRef.current) { clearTimeout(giveUp); return; }
+      const target = `kazagame-${joinCode.trim().toUpperCase()}`;
+      const c = p.connect(target, { reliable: true, serialization: 'json' });
+
+      c.on('open', () => {
+        if (done || cancelRef.current) return;
+        done = true; clearTimeout(giveUp);
+        setStatus('¡Conectado!');
+        setTimeout(() => onConnected(c, false), 400);
+      });
+
+      c.on('error', () => {
+        if (done || cancelRef.current) return;
+        done = true; clearTimeout(giveUp);
+        if (attempt < MAX_RETRIES) { doJoin(attempt + 1); }
+        else { setError('Error de conexión. Verifica el código.'); setMode('joining'); }
+      });
     });
-    p.on('error', err => setError(`Error: ${err.type}`));
+
+    p.on('error', err => {
+      if (done || cancelRef.current) return;
+      clearTimeout(giveUp);
+      if (err.type === 'peer-unavailable') {
+        done = true;
+        if (attempt < MAX_RETRIES) {
+          setTimeout(() => doJoin(attempt + 1), RETRY_MS);
+        } else {
+          setError('Sala no encontrada. ¿El anfitrión ya creó la sala?');
+          setMode('joining');
+        }
+      } else {
+        done = true;
+        setError(`Error: ${err.type}`);
+        setMode('joining');
+      }
+    });
   };
 
-  const cancel = () => { setMode(null); setCode(''); setError(''); if (peerRef.current) try { peerRef.current.destroy(); peerRef.current = null; } catch {} };
+  const startJoin = () => { if (!joinCode.trim()) return; setMode('join'); doJoin(0); };
 
+  const cancel = () => {
+    cancelRef.current = true;
+    setMode(null); setCode(''); setError(''); setRetries(0);
+    if (peerRef.current) { try { peerRef.current.destroy(); } catch {} peerRef.current = null; }
+    cancelRef.current = false;
+  };
+
+  const copyCode = () => { navigator.clipboard?.writeText(code).catch(()=>{}); setCopied(true); setTimeout(() => setCopied(false), 2000); };
+
+  /* ── RENDER ── */
   if (!mode) return (
     <div className="screen-center">
       <div className="logo">⚔ Kaza's Grimoire</div>
       <div style={{ fontFamily:"'Cinzel Decorative',serif", fontSize:12, color:'var(--text2)', marginTop:-14 }}>Mesa de Juego</div>
       <div className="card-panel">
         <div className="panel-title">¿Cómo quieres jugar?</div>
-        <button className="btn btn-primary" style={{ fontSize:15, padding:14 }} onClick={createGame}>🏠 Crear partida</button>
-        <button className="btn btn-secondary" style={{ fontSize:15, padding:14 }} onClick={() => setMode('joining')}>🔗 Unirse a partida</button>
+        <button className="btn btn-primary"   style={{ fontSize:15, padding:14 }} onClick={createGame}>🏠 Crear partida</button>
+        <button className="btn btn-secondary" style={{ fontSize:15, padding:14 }} onClick={() => { setError(''); setMode('joining'); }}>🔗 Unirse a partida</button>
         <div style={{ height:1, background:'var(--border)' }} />
         <button className="btn btn-secondary" style={{ opacity:.7 }} onClick={onSolo}>🧙 Modo solitario</button>
         <a href="coleccion.html" style={{ textAlign:'center', fontSize:12, color:'var(--text2)', textDecoration:'none' }}>← Volver a colección</a>
@@ -1492,12 +1560,17 @@ function Lobby({ onConnected, onSolo }) {
       <div className="logo">⚔ Kaza's Grimoire</div>
       <div className="card-panel">
         <div className="panel-title">Unirse a partida</div>
-        <input className="input-field" placeholder="Código de sala (6 letras)" value={joinCode}
+        <input className="input-field" placeholder="Código de sala (6 caracteres)" value={joinCode}
           onChange={e => setJoinCode(e.target.value.toUpperCase())} maxLength={6}
-          onKeyDown={e => e.key === 'Enter' && joinGame()}
-          style={{ fontSize:24, textAlign:'center', letterSpacing:8, fontFamily:'monospace', fontWeight:800 }} />
-        {error && <div style={{ color:'var(--red)', fontSize:12 }}>{error}</div>}
-        <button className="btn btn-primary" onClick={joinGame} disabled={joinCode.length < 4}>Conectar →</button>
+          onKeyDown={e => e.key === 'Enter' && startJoin()}
+          autoFocus
+          style={{ fontSize:26, textAlign:'center', letterSpacing:10, fontFamily:'monospace', fontWeight:800 }} />
+        {error && (
+          <div style={{ background:'rgba(248,113,113,.1)', border:'1px solid rgba(248,113,113,.3)', borderRadius:8, padding:'8px 12px', fontSize:12, color:'var(--red)' }}>
+            ⚠️ {error}
+          </div>
+        )}
+        <button className="btn btn-primary" onClick={startJoin} disabled={joinCode.length < 4}>Conectar →</button>
         <button className="btn btn-secondary" onClick={cancel}>← Volver</button>
       </div>
     </div>
@@ -1507,12 +1580,21 @@ function Lobby({ onConnected, onSolo }) {
     <div className="screen-center">
       <div className="logo">⚔ Kaza's Grimoire</div>
       <div className="card-panel">
-        <div className="panel-title">Conectando…</div>
-        <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:14, padding:'8px 0' }}>
-          <div className="spinner" style={{ width:34, height:34 }} />
+        <div className="panel-title" style={{ textAlign:'center' }}>Conectando a sala <span style={{ color:'var(--accent)', fontFamily:'monospace', letterSpacing:4 }}>{joinCode}</span></div>
+        <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:12, padding:'8px 0' }}>
+          <div className="spinner" style={{ width:36, height:36 }} />
           <span style={{ color:'var(--text2)', fontSize:13 }}>{status}</span>
+          {retries > 0 && (
+            <div style={{ display:'flex', gap:4 }}>
+              {Array.from({ length: MAX_RETRIES }).map((_, i) => (
+                <div key={i} style={{ width:8, height:8, borderRadius:'50%', background: i < retries ? 'var(--accent)' : 'var(--border)', transition:'background .3s' }} />
+              ))}
+            </div>
+          )}
+          <div style={{ fontSize:11, color:'var(--text2)', textAlign:'center', opacity:.6, lineHeight:1.5 }}>
+            El anfitrión debe tener la sala abierta.<br/>Reintentando automáticamente si no se encuentra.
+          </div>
         </div>
-        {error && <div style={{ color:'var(--red)', fontSize:12 }}>{error}</div>}
         <button className="btn btn-secondary" onClick={cancel}>← Cancelar</button>
       </div>
     </div>
@@ -1524,10 +1606,18 @@ function Lobby({ onConnected, onSolo }) {
       <div className="logo">⚔ Kaza's Grimoire</div>
       <div className="card-panel">
         <div className="panel-title">Comparte este código con tu rival</div>
-        <div className="code-display">{code}</div>
+        <div className="code-display" style={{ cursor:'pointer' }} onClick={copyCode} title="Clic para copiar">
+          {code}
+        </div>
+        <button className="btn btn-secondary" style={{ fontSize:12 }} onClick={copyCode}>
+          {copied ? '✅ Copiado!' : '📋 Copiar código'}
+        </button>
         <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:10 }}>
           <div className="spinner" />
           <span style={{ color:'var(--text2)', fontSize:13 }}>{status}</span>
+        </div>
+        <div style={{ fontSize:11, color:'var(--text2)', textAlign:'center', opacity:.6, lineHeight:1.5 }}>
+          Espera a que tu rival ingrese el código.<br/>Ambos deben estar en esta página al mismo tiempo.
         </div>
         {error && <div style={{ color:'var(--red)', fontSize:12 }}>{error}</div>}
         <button className="btn btn-secondary" onClick={cancel}>← Cancelar</button>
