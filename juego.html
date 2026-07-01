@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>Kaza's Grimoire — Mesa de Juego</title>
   <link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@400;700&display=swap" rel="stylesheet">
-  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <script src="https://cdn.ably.com/lib/ably.min-2.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.development.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.development.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
@@ -272,42 +272,36 @@
 const { useState, useEffect, useReducer, useRef, useCallback, useMemo } = React;
 
 /* ═══════════════════════════════════════════════
-   WEBRTC ICE CONFIG
-   STUN: múltiples proveedores para mejor cobertura
-   TURN: relay para cuando NAT impide conexión directa
+   ABLY — conexión en tiempo real (reemplaza PeerJS)
 ═══════════════════════════════════════════════ */
-const ICE_CONFIG = {
-  iceServers: [
-    { urls: 'stun:stun.l.google.com:19302' },
-    { urls: 'stun:stun1.l.google.com:19302' },
-    { urls: 'stun:stun2.l.google.com:19302' },
-    { urls: 'stun:stun3.l.google.com:19302' },
-    { urls: 'stun:stun4.l.google.com:19302' },
-    { urls: 'stun:stun.cloudflare.com:3478' },
-    { urls: 'stun:openrelay.metered.ca:80' },
-    {
-      urls: 'turn:openrelay.metered.ca:80',
-      username: 'openrelayproject',
-      credential: 'openrelayproject',
-    },
-    {
-      urls: 'turn:openrelay.metered.ca:443',
-      username: 'openrelayproject',
-      credential: 'openrelayproject',
-    },
-    {
-      urls: 'turn:openrelay.metered.ca:443?transport=tcp',
-      username: 'openrelayproject',
-      credential: 'openrelayproject',
-    },
-    {
-      urls: 'turns:openrelay.metered.ca:443?transport=tcp',
-      username: 'openrelayproject',
-      credential: 'openrelayproject',
-    },
-  ],
-  iceCandidatePoolSize: 10,
-};
+const ABLY_KEY = '75uUVw.7kbHVQ:zrq-gEK7EyZN15bVI1P9-QKZCmmSszp51DnVzQkE17k';
+
+/* Crea un objeto "conn" compatible con la API que usa el resto del juego */
+function makeConn(channel, myRole) {
+  const otherRole = myRole === 'host' ? 'joiner' : 'host';
+  const listeners = { data: [], close: [], error: [] };
+
+  channel.subscribe('msg', msg => {
+    if (msg.data?.from === otherRole) {
+      const d = { ...msg.data };
+      delete d.from;
+      listeners.data.forEach(fn => fn(d));
+    }
+  });
+
+  channel.presence.subscribe('leave', member => {
+    if (member.clientData?.role === otherRole || member.data?.role === otherRole) {
+      listeners.close.forEach(fn => fn());
+    }
+  });
+
+  return {
+    get open() { return true; },
+    send(data) { channel.publish('msg', { ...data, from: myRole }).catch(() => {}); },
+    on(ev, fn)  { if (listeners[ev]) listeners[ev].push(fn); },
+    off(ev, fn) { if (listeners[ev]) listeners[ev] = listeners[ev].filter(f => f !== fn); },
+  };
+}
 
 /* ═══════════════════════════════════════════════
    UTILITIES
@@ -1677,22 +1671,18 @@ function DeckSelect({ conn, isHost, onStart, onBack }) {
    LOBBY SCREEN
 ═══════════════════════════════════════════════ */
 function Lobby({ onConnected, onSolo }) {
-  const [mode, setMode]       = useState(null); // null | 'host' | 'joining' | 'join'
-  const [code, setCode]       = useState('');
+  const [mode, setMode]         = useState(null); // null | 'host' | 'joining' | 'join'
+  const [code, setCode]         = useState('');
   const [joinCode, setJoinCode] = useState('');
-  const [status, setStatus]   = useState('');
-  const [error, setError]     = useState('');
-  const [retries, setRetries] = useState(0);
-  const [copied, setCopied]   = useState(false);
-  const peerRef    = useRef(null);
-  const cancelRef  = useRef(false); // prevent state updates after cancel
-  const MAX_RETRIES = 4;
-  const RETRY_MS    = 3000;
-  const CONN_TIMEOUT = 25000; // 25s — TURN relay puede tardar bastante
+  const [status, setStatus]     = useState('');
+  const [error, setError]       = useState('');
+  const [copied, setCopied]     = useState(false);
+  const ablyRef   = useRef(null);
+  const cancelRef = useRef(false);
 
   useEffect(() => () => {
     cancelRef.current = true;
-    if (peerRef.current) try { peerRef.current.destroy(); } catch {}
+    if (ablyRef.current) try { ablyRef.current.close(); } catch {}
   }, []);
 
   /* ── HOST ── */
@@ -1700,94 +1690,89 @@ function Lobby({ onConnected, onSolo }) {
     setError(''); cancelRef.current = false;
     const roomCode = Math.random().toString(36).slice(2, 8).toUpperCase();
     setCode(roomCode); setMode('host'); setStatus('Registrando sala…');
-    const p = new Peer(`kazagame-${roomCode}`, { debug: 0, config: ICE_CONFIG });
-    peerRef.current = p;
-    p.on('open', () => { if (!cancelRef.current) setStatus('Sala lista — comparte el código'); });
-    p.on('error', err => {
+
+    const ably = new Ably.Realtime({ key: ABLY_KEY });
+    ablyRef.current = ably;
+    const channel = ably.channels.get(`kazagame-${roomCode}`);
+
+    ably.connection.once('connected', async () => {
       if (cancelRef.current) return;
-      if (err.type === 'unavailable-id') { setError('Código ocupado, intenta de nuevo.'); setMode(null); }
-      else { setError(`Error PeerJS: ${err.type}`); }
-    });
-    p.on('connection', c => {
-      c.on('open', () => {
+      try { await channel.presence.enter({ role: 'host' }); } catch {}
+      if (!cancelRef.current) setStatus('Sala lista — comparte el código');
+
+      channel.subscribe('join', async () => {
         if (cancelRef.current) return;
+        try { await channel.publish('confirm', { ok: true }); } catch {}
         setStatus('¡Conectado!');
-        peerRef.current = null; // evitar que el cleanup destruya el peer al desmontar Lobby
-        setTimeout(() => onConnected(c, true), 400);
+        const conn = makeConn(channel, 'host');
+        ablyRef.current = null;
+        setTimeout(() => onConnected(conn, true), 400);
       });
-      c.on('error', () => { if (!cancelRef.current) setError('Error en la conexión entrante.'); });
+    });
+
+    ably.connection.on('failed', () => {
+      if (!cancelRef.current) setError('Error al conectar con Ably.');
     });
   };
 
-  /* ── JOIN (con reintentos automáticos) ── */
-  const doJoin = (attempt = 0) => {
-    if (cancelRef.current) return;
-    setRetries(attempt);
-    setStatus(attempt === 0 ? 'Buscando sala…' : `Reintentando… (${attempt}/${MAX_RETRIES})`);
+  /* ── JOIN ── */
+  const startJoin = () => {
+    if (!joinCode.trim()) return;
+    setError(''); cancelRef.current = false;
+    setMode('join'); setStatus('Buscando sala…');
+    const roomCode = joinCode.trim().toUpperCase();
 
-    // Destroy previous peer before creating a new one
-    if (peerRef.current) { try { peerRef.current.destroy(); } catch {} peerRef.current = null; }
+    const ably = new Ably.Realtime({ key: ABLY_KEY });
+    ablyRef.current = ably;
+    const channel = ably.channels.get(`kazagame-${roomCode}`);
 
-    const p = new Peer({ debug: 0, config: ICE_CONFIG });
-    peerRef.current = p;
-    let done = false;
+    let confirmed = false;
+    let joinIv = null;
 
-    // Timeout: if open+connect takes too long, retry
     const giveUp = setTimeout(() => {
-      if (done || cancelRef.current) return;
-      done = true;
-      p.destroy();
-      if (attempt < MAX_RETRIES) { doJoin(attempt + 1); }
-      else { setError('No se pudo conectar tras varios intentos. Verifica el código.'); setMode('joining'); }
-    }, CONN_TIMEOUT);
+      if (confirmed || cancelRef.current) return;
+      if (joinIv) clearInterval(joinIv);
+      setError('No se encontró la sala. ¿El anfitrión ya la creó?');
+      setMode('joining');
+    }, 30000);
 
-    p.on('open', () => {
+    ably.connection.once('connected', async () => {
       if (cancelRef.current) { clearTimeout(giveUp); return; }
-      const target = `kazagame-${joinCode.trim().toUpperCase()}`;
-      setStatus('Sala encontrada — estableciendo conexión…');
-      const c = p.connect(target, { reliable: true, serialization: 'json' });
+      try { await channel.presence.enter({ role: 'joiner' }); } catch {}
 
-      c.on('open', () => {
-        if (done || cancelRef.current) return;
-        done = true; clearTimeout(giveUp);
+      channel.subscribe('confirm', () => {
+        if (confirmed || cancelRef.current) return;
+        confirmed = true;
+        if (joinIv) clearInterval(joinIv);
+        clearTimeout(giveUp);
         setStatus('¡Conectado!');
-        peerRef.current = null; // evitar que el cleanup destruya el peer al desmontar Lobby
-        setTimeout(() => onConnected(c, false), 400);
+        const conn = makeConn(channel, 'joiner');
+        ablyRef.current = null;
+        setTimeout(() => onConnected(conn, false), 400);
       });
 
-      c.on('error', () => {
-        if (done || cancelRef.current) return;
-        done = true; clearTimeout(giveUp);
-        if (attempt < MAX_RETRIES) { doJoin(attempt + 1); }
-        else { setError('Error de conexión. Verifica el código.'); setMode('joining'); }
-      });
+      // Publica join y reintenta cada 2s hasta recibir confirm
+      const tryJoin = () => {
+        if (confirmed || cancelRef.current) return;
+        channel.publish('join', { from: 'joiner' }).catch(() => {});
+      };
+      tryJoin();
+      joinIv = setInterval(() => {
+        if (confirmed || cancelRef.current) { clearInterval(joinIv); return; }
+        tryJoin();
+      }, 2000);
     });
 
-    p.on('error', err => {
-      if (done || cancelRef.current) return;
-      clearTimeout(giveUp);
-      if (err.type === 'peer-unavailable') {
-        done = true;
-        if (attempt < MAX_RETRIES) {
-          setTimeout(() => doJoin(attempt + 1), RETRY_MS);
-        } else {
-          setError('Sala no encontrada. ¿El anfitrión ya creó la sala?');
-          setMode('joining');
-        }
-      } else {
-        done = true;
-        setError(`Error: ${err.type}`);
-        setMode('joining');
-      }
+    ably.connection.on('failed', () => {
+      if (!cancelRef.current) { clearTimeout(giveUp); setError('Error al conectar con Ably.'); }
     });
   };
-
-  const startJoin = () => { if (!joinCode.trim()) return; setMode('join'); doJoin(0); };
 
   const cancel = () => {
     cancelRef.current = true;
-    setMode(null); setCode(''); setError(''); setRetries(0);
-    if (peerRef.current) { try { peerRef.current.destroy(); } catch {} peerRef.current = null; }
+    if (ablyRef.current) try { ablyRef.current.close(); } catch {}
+    ablyRef.current = null;
+    setMode(null); setCode(''); setError('');
     cancelRef.current = false;
   };
 
@@ -1838,15 +1823,8 @@ function Lobby({ onConnected, onSolo }) {
         <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:12, padding:'8px 0' }}>
           <div className="spinner" style={{ width:36, height:36 }} />
           <span style={{ color:'var(--text2)', fontSize:13 }}>{status}</span>
-          {retries > 0 && (
-            <div style={{ display:'flex', gap:4 }}>
-              {Array.from({ length: MAX_RETRIES }).map((_, i) => (
-                <div key={i} style={{ width:8, height:8, borderRadius:'50%', background: i < retries ? 'var(--accent)' : 'var(--border)', transition:'background .3s' }} />
-              ))}
-            </div>
-          )}
           <div style={{ fontSize:11, color:'var(--text2)', textAlign:'center', opacity:.6, lineHeight:1.5 }}>
-            El anfitrión debe tener la sala abierta.<br/>Reintentando automáticamente si no se encuentra.
+            El anfitrión debe tener la sala abierta.<br/>Conectando vía Ably…
           </div>
         </div>
         <button className="btn btn-secondary" onClick={cancel}>← Cancelar</button>
