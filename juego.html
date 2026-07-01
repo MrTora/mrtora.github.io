@@ -1340,10 +1340,29 @@ function DeckSelect({ conn, isHost, onStart, onBack }) {
   const [myReady, setMyReady]   = useState(false);
   const [oppInfo, setOppInfo]   = useState(null);
   const [oppReady, setOppReady] = useState(false);
+  const [dbgLog, setDbgLog]     = useState([]);
+  const myReadyRef  = useRef(false);
+  const oppReadyRef = useRef(false);
+  const selRef      = useRef(null);
+
+  const dbg = msg => setDbgLog(l => [...l.slice(-6), `${new Date().toLocaleTimeString('es',{hour:'2-digit',minute:'2-digit',second:'2-digit'})} ${msg}`]);
+
+  useEffect(() => { myReadyRef.current  = myReady;  }, [myReady]);
+  useEffect(() => { oppReadyRef.current = oppReady; }, [oppReady]);
+  useEffect(() => { selRef.current      = sel;      }, [sel]);
+
+  const sendSafe = useCallback(msg => {
+    if (!conn) { dbg('✗ send: sin conn'); return; }
+    const open = conn.open;
+    try { conn.send(msg); dbg(`→ enviado (open=${open}): ${msg.type}`); }
+    catch(e) { dbg(`✗ send error: ${e.message}`); }
+  }, [conn]);
 
   useEffect(() => {
     if (!conn) return;
+    dbg(`conn registrada open=${conn.open}`);
     const fn = d => {
+      dbg(`← recibido: ${d.type}`);
       if (d.type === 'DECK_READY')   { setOppInfo({ name: d.name, format: d.format }); setOppReady(true); }
       if (d.type === 'DECK_UNREADY') { setOppInfo(null); setOppReady(false); }
     };
@@ -1351,17 +1370,33 @@ function DeckSelect({ conn, isHost, onStart, onBack }) {
     return () => conn.off('data', fn);
   }, [conn]);
 
+  // Reenviar DECK_READY cada 1.5s mientras myReady=true y oppReady=false
   useEffect(() => {
-    if (myReady && (oppReady || !conn) && sel) onStart(sel, oppInfo?.name || 'Solitario');
+    if (!conn || !myReady || oppReady) return;
+    const s = selRef.current;
+    if (!s) return;
+    const iv = setInterval(() => {
+      if (oppReadyRef.current) { clearInterval(iv); return; }
+      sendSafe({ type:'DECK_READY', name:s.name, format:s.format||'' });
+    }, 1500);
+    return () => clearInterval(iv);
+  }, [conn, myReady, oppReady, sendSafe]);
+
+  useEffect(() => {
+    if (myReady && (oppReady || !conn) && sel) {
+      dbg('▶ onStart!');
+      onStart(sel, oppInfo?.name || 'Solitario');
+    }
   }, [myReady, oppReady, sel, conn, oppInfo, onStart]);
 
   const ready = () => {
     if (!sel) return;
     setMyReady(true);
-    if (conn && conn.open) try { conn.send({ type:'DECK_READY', name:sel.name, format:sel.format||'' }); } catch {}
+    dbg(`listo con: ${sel.name}`);
+    sendSafe({ type:'DECK_READY', name:sel.name, format:sel.format||'' });
     if (!conn) onStart(sel, 'Solitario');
   };
-  const unready = () => { setMyReady(false); if (conn && conn.open) try { conn.send({ type:'DECK_UNREADY' }); } catch {} };
+  const unready = () => { setMyReady(false); sendSafe({ type:'DECK_UNREADY' }); };
 
   const fmtWarn = oppInfo && sel?.format && oppInfo.format && sel.format !== oppInfo.format;
 
@@ -1418,6 +1453,20 @@ function DeckSelect({ conn, isHost, onStart, onBack }) {
           }
         </div>
         {myReady && conn && <div style={{ textAlign:'center', fontSize:12, color:'var(--text2)' }}>Esperando rival…</div>}
+
+        {/* ── DEBUG PANEL ── */}
+        {conn && dbgLog.length > 0 && (
+          <div style={{
+            background:'#0d1117', border:'1px solid #30363d', borderRadius:8,
+            padding:'8px 10px', fontSize:10, fontFamily:'monospace',
+            color:'#8b949e', maxHeight:120, overflowY:'auto',
+          }}>
+            <div style={{color:'#58a6ff', fontWeight:700, marginBottom:4}}>
+              🔌 Debug · open={String(conn.open)} · yo={isHost?'HOST':'JOIN'} · myReady={String(myReady)} · oppReady={String(oppReady)}
+            </div>
+            {dbgLog.map((l,i) => <div key={i}>{l}</div>)}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -1461,6 +1510,7 @@ function Lobby({ onConnected, onSolo }) {
       c.on('open', () => {
         if (cancelRef.current) return;
         setStatus('¡Conectado!');
+        peerRef.current = null; // evitar que el cleanup destruya el peer al desmontar Lobby
         setTimeout(() => onConnected(c, true), 400);
       });
       c.on('error', () => { if (!cancelRef.current) setError('Error en la conexión entrante.'); });
@@ -1498,6 +1548,7 @@ function Lobby({ onConnected, onSolo }) {
         if (done || cancelRef.current) return;
         done = true; clearTimeout(giveUp);
         setStatus('¡Conectado!');
+        peerRef.current = null; // evitar que el cleanup destruya el peer al desmontar Lobby
         setTimeout(() => onConnected(c, false), 400);
       });
 
