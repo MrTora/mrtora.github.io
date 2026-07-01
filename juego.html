@@ -1,0 +1,1571 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Kaza's Grimoire — Mesa de Juego</title>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@400;700&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.development.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.development.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --surface: rgba(42,26,9,0.96); --surface2: rgba(56,36,12,0.98);
+      --border: rgba(155,108,38,0.5); --accent: #c49a2a; --accent2: #8b5cf6;
+      --text: #edddb8; --text2: #9a7c50; --red: #f87171; --green: #4ade80;
+    }
+    html, body, #root { height: 100%; overflow: hidden; background: #0a0a12; color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; }
+    button { cursor: pointer; border: none; font-family: inherit; }
+    input  { font-family: inherit; }
+    ::-webkit-scrollbar { width: 4px; height: 4px; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+    /* ── Shared ── */
+    .btn { padding: 10px 20px; border-radius: 8px; font-size: 14px; font-weight: 600; transition: all .15s; }
+    .btn-primary   { background: var(--accent); color: #000; }
+    .btn-primary:hover { background: #d4aa3a; }
+    .btn-secondary { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+    .btn-secondary:hover { border-color: var(--accent2); }
+    .btn-danger    { background: rgba(248,113,113,.15); color: var(--red); border: 1px solid rgba(248,113,113,.4); }
+    .input-field   { background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; color: var(--text); font-size: 14px; width: 100%; }
+    .input-field:focus { outline: none; border-color: var(--accent2); }
+    .spinner { display: inline-block; width: 20px; height: 20px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin .7s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.35} }
+
+    /* ── Lobby / Select screens ── */
+    .screen-center {
+      min-height: 100vh; display: flex; flex-direction: column; align-items: center;
+      justify-content: center; gap: 20px; padding: 20px;
+      background: linear-gradient(rgba(8,6,12,.72),rgba(8,6,12,.72)), url('static/wallpaper.png') center/cover no-repeat fixed;
+    }
+    .logo { font-family: 'Cinzel Decorative', serif; font-size: 20px; color: var(--accent); letter-spacing: 1px; }
+    .card-panel {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+      padding: 28px; width: 100%; max-width: 440px; display: flex; flex-direction: column; gap: 14px;
+      box-shadow: 0 8px 40px rgba(0,0,0,.6);
+    }
+    .panel-title { font-family: 'Cinzel Decorative', serif; font-size: 14px; color: var(--text); }
+    .code-display {
+      font-size: 34px; font-weight: 800; letter-spacing: 10px; color: var(--accent);
+      text-align: center; padding: 16px; background: var(--surface2);
+      border: 2px dashed var(--border); border-radius: 10px; font-family: 'Courier New', monospace;
+    }
+    .deck-item {
+      padding: 12px 16px; border-radius: 10px; border: 2px solid var(--border);
+      background: var(--surface2); cursor: pointer; transition: all .12s;
+      display: flex; align-items: center; gap: 12px;
+    }
+    .deck-item:hover { border-color: var(--accent); }
+    .deck-item.selected { border-color: var(--accent2); background: rgba(139,92,246,.12); }
+    .format-badge { font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 4px; background: rgba(139,92,246,.2); color: var(--accent2); border: 1px solid rgba(139,92,246,.4); margin-left: auto; flex-shrink: 0; text-transform: uppercase; }
+    .progress-bar { width: 100%; height: 8px; background: var(--surface2); border-radius: 4px; overflow: hidden; }
+    .progress-fill { height: 100%; background: var(--accent); border-radius: 4px; transition: width .2s; }
+
+    /* ── Game layout ── */
+    .game-root { display: flex; flex-direction: column; height: 100vh; overflow: hidden; background: #0d0d18; }
+
+    /* Header */
+    .game-header {
+      flex-shrink: 0; height: 38px; background: var(--surface); border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; gap: 8px; padding: 0 10px; z-index: 10;
+    }
+    .gh-logo { font-family: 'Cinzel Decorative', serif; font-size: 11px; color: var(--accent); white-space: nowrap; }
+    .gh-sep  { width: 1px; height: 18px; background: var(--border); flex-shrink: 0; }
+    .gh-pill { padding: 2px 7px; border-radius: 4px; font-size: 11px; font-weight: 700; border: 1px solid var(--border); background: var(--surface2); color: var(--text2); white-space: nowrap; }
+    .conn-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; transition: background .3s; }
+    .conn-dot.on  { background: var(--green); box-shadow: 0 0 6px var(--green); }
+    .conn-dot.off { background: var(--red); }
+    .conn-dot.wait { background: var(--accent); animation: pulse 1.2s ease-in-out infinite; }
+
+    /* Zones */
+    .opp-zone   { flex: 0 0 auto; height: 40vh; min-height: 175px; display: flex; flex-direction: column; border-bottom: 2px solid rgba(139,92,246,.2); background: rgba(20,10,30,.45); position: relative; }
+    .player-zone { flex: 1; min-height: 0; display: flex; flex-direction: column; position: relative; }
+
+    /* Info bars */
+    .info-bar { flex-shrink: 0; height: 34px; display: flex; align-items: center; gap: 7px; padding: 0 9px; background: rgba(0,0,0,.38); border-bottom: 1px solid var(--border); overflow-x: auto; }
+    .info-bar.bottom { border-top: 1px solid var(--border); border-bottom: none; }
+    .life-val { font-size: 19px; font-weight: 800; color: var(--green); min-width: 34px; text-align: center; cursor: pointer; }
+    .life-val.low { color: var(--red); }
+    .life-btn { width: 21px; height: 21px; border-radius: 4px; background: var(--surface2); border: 1px solid var(--border); color: var(--text); font-size: 14px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+    .life-btn:hover { border-color: var(--accent); }
+    .zone-pill { display: flex; align-items: center; gap: 3px; padding: 2px 7px; border-radius: 5px; border: 1px solid var(--border); background: var(--surface2); font-size: 11px; color: var(--text2); cursor: pointer; transition: border-color .12s; white-space: nowrap; flex-shrink: 0; }
+    .zone-pill:hover { border-color: var(--accent); }
+
+    /* Battlefield */
+    .bf-wrap { flex: 1; min-height: 0; display: flex; overflow: hidden; }
+    .bf {
+      flex: 1; min-height: 0; display: flex; flex-wrap: wrap; align-content: flex-start;
+      gap: 4px; padding: 5px; overflow-y: auto; overflow-x: hidden;
+    }
+    .bf.lands { flex: 0 0 110px; border-left: 1px solid rgba(155,108,38,.18); background: rgba(0,40,0,.07); }
+    .bf-label { font-size: 9px; font-weight: 700; color: var(--text2); text-transform: uppercase; letter-spacing: .5px; padding: 2px 4px; background: rgba(0,0,0,.55); width: 100%; flex-shrink: 0; }
+
+    /* Battlefield card */
+    .bf-card { position: relative; cursor: pointer; transition: transform .2s ease, filter .15s; transform-origin: center center; flex-shrink: 0; user-select: none; }
+    .bf-card.tapped { transform: rotate(90deg); }
+    .bf-card:hover { z-index: 5; }
+    .bf-card:hover img { box-shadow: 0 0 14px rgba(196,154,42,.65); }
+    .bf-card.sickness img { filter: brightness(.72) saturate(.55); }
+    .bf-card.attacking img { box-shadow: 0 0 14px 3px rgba(248,113,113,.85) !important; }
+    .bf-card.blocking  img { box-shadow: 0 0 14px 3px rgba(74,222,128,.85) !important; }
+    .bf-card img { display: block; width: 68px; border-radius: 5px; box-shadow: 0 3px 10px rgba(0,0,0,.6); }
+    .bf-card .no-img { width: 68px; height: 95px; border-radius: 5px; background: var(--surface2); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; font-size: 9px; color: var(--text2); text-align: center; padding: 3px; line-height: 1.3; box-shadow: 0 3px 10px rgba(0,0,0,.6); }
+    .bf-card .ctrs { position: absolute; bottom: 2px; left: 0; right: 0; display: flex; justify-content: center; flex-wrap: wrap; gap: 1px; }
+    .ctr-badge { font-size: 8px; font-weight: 800; padding: 1px 4px; border-radius: 3px; background: rgba(0,0,0,.85); border: 1px solid rgba(255,255,255,.2); color: #fff; }
+
+    /* Hand */
+    .hand-bar { flex-shrink: 0; min-height: 84px; max-height: 108px; display: flex; align-items: flex-end; padding: 4px 8px 4px; gap: 3px; overflow-x: auto; overflow-y: hidden; background: rgba(0,0,0,.28); border-top: 1px solid var(--border); }
+    .hand-card { flex-shrink: 0; cursor: pointer; transition: transform .15s; z-index: 1; position: relative; }
+    .hand-card:hover { transform: translateY(-15px); z-index: 10; }
+    .hand-card img { display: block; width: 68px; border-radius: 6px; box-shadow: 0 4px 16px rgba(0,0,0,.7); }
+    .hand-card .no-img { width: 68px; height: 95px; border-radius: 6px; background: var(--surface2); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; font-size: 9px; color: var(--text2); text-align: center; padding: 3px; line-height: 1.3; }
+
+    /* Opponent hand (face down) */
+    .opp-hand { flex-shrink: 0; height: 46px; display: flex; align-items: center; padding: 0 8px; gap: 0; overflow: hidden; border-top: 1px solid rgba(155,108,38,.18); }
+    .face-down { width: 32px; height: 44px; border-radius: 4px; background: linear-gradient(135deg,#1a0e00,#3a2010,#1a0e00); border: 1px solid rgba(155,108,38,.45); flex-shrink: 0; margin-right: -12px; box-shadow: 0 2px 6px rgba(0,0,0,.5); }
+
+    /* Phase bar */
+    .phase-bar { flex-shrink: 0; height: 32px; background: var(--surface); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); display: flex; align-items: center; padding: 0 6px; overflow-x: auto; gap: 0; }
+    .ph-btn { padding: 3px 9px; font-size: 11px; font-weight: 600; background: transparent; color: var(--text2); border: none; border-radius: 4px; white-space: nowrap; transition: all .12s; flex-shrink: 0; }
+    .ph-btn:hover { background: var(--surface2); color: var(--text); }
+    .ph-btn.active { background: var(--accent2); color: #fff; }
+    .ph-sep { width: 1px; height: 14px; background: var(--border); flex-shrink: 0; margin: 0 1px; }
+    .turn-pill { margin-left: auto; font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 5px; flex-shrink: 0; white-space: nowrap; }
+    .turn-mine   { background: rgba(74,222,128,.14); color: var(--green); border: 1px solid rgba(74,222,128,.38); }
+    .turn-theirs { background: rgba(248,113,113,.14); color: var(--red);   border: 1px solid rgba(248,113,113,.38); }
+
+    /* Action bar */
+    .action-bar { flex-shrink: 0; height: 34px; background: rgba(0,0,0,.38); border-top: 1px solid var(--border); display: flex; align-items: center; gap: 5px; padding: 0 7px; overflow-x: auto; }
+    .act-btn { padding: 3px 9px; border-radius: 5px; font-size: 11px; font-weight: 600; background: var(--surface2); color: var(--text2); border: 1px solid var(--border); white-space: nowrap; flex-shrink: 0; transition: all .12s; }
+    .act-btn:hover { border-color: var(--accent); color: var(--text); }
+    .act-btn.hl { border-color: var(--accent2); color: var(--accent2); }
+    .act-btn.go { border-color: var(--green);   color: var(--green); }
+    .act-btn:disabled { opacity: .38; pointer-events: none; }
+
+    /* Context menu */
+    .ctx { position: fixed; z-index: 1000; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 4px; min-width: 162px; box-shadow: 0 8px 32px rgba(0,0,0,.75); }
+    .ctx-item { padding: 6px 12px; border-radius: 6px; font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: background .1s; color: var(--text); }
+    .ctx-item:hover { background: var(--surface2); }
+    .ctx-item.danger { color: var(--red); }
+    .ctx-sep   { height: 1px; background: var(--border); margin: 3px 0; }
+    .ctx-label { padding: 3px 12px; font-size: 10px; font-weight: 700; color: var(--text2); text-transform: uppercase; letter-spacing: .5px; }
+
+    /* Zone modal */
+    .modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,.87); display: flex; align-items: center; justify-content: center; z-index: 500; padding: 16px; }
+    .modal-box { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 18px; max-width: 580px; width: 100%; max-height: 88vh; display: flex; flex-direction: column; gap: 12px; }
+    .modal-head { display: flex; justify-content: space-between; align-items: center; }
+    .modal-grid { display: flex; flex-wrap: wrap; gap: 10px; overflow-y: auto; flex: 1; }
+    .zone-card { display: flex; flex-direction: column; align-items: center; gap: 4px; cursor: pointer; }
+    .zone-card img { width: 86px; border-radius: 6px; box-shadow: 0 3px 10px rgba(0,0,0,.5); }
+    .zone-card span { font-size: 10px; color: var(--text2); text-align: center; max-width: 86px; line-height: 1.3; }
+
+    /* Game log */
+    .log-panel { position: absolute; bottom: 0; right: 0; width: 210px; max-height: 110px; background: rgba(0,0,0,.72); border-top-left-radius: 9px; border: 1px solid var(--border); border-bottom: none; border-right: none; overflow-y: auto; padding: 5px 7px; pointer-events: none; z-index: 20; }
+    .log-line { font-size: 10px; line-height: 1.5; padding: 1px 0; color: var(--text2); }
+    .log-line.mine { color: var(--text); }
+    .log-line.sys  { color: var(--accent); font-weight: 600; }
+
+    /* Disconnected */
+    .disc-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.88); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 900; gap: 14px; }
+
+    /* Opp label */
+    .opp-label { position: absolute; top: 3px; right: 7px; z-index: 10; font-size: 10px; font-weight: 600; color: var(--text2); opacity: .65; }
+    .empty-hint { opacity: .22; font-size: 11px; color: var(--text2); text-align: center; width: 100%; padding: 10px 0; }
+
+    /* ── Stack zone ── */
+    .stack-zone { flex-shrink: 0; background: rgba(139,92,246,.07); border-top: 2px solid rgba(139,92,246,.38); border-bottom: 2px solid rgba(139,92,246,.38); padding: 6px 10px; display: flex; flex-direction: column; gap: 5px; max-height: 150px; overflow-y: auto; }
+    .stack-header { font-size: 10px; font-weight: 800; color: var(--accent2); letter-spacing: .5px; text-transform: uppercase; padding: 0 2px; }
+    .stack-entry { display: flex; align-items: center; gap: 8px; background: rgba(0,0,0,.38); border-radius: 8px; padding: 5px 9px; border: 1px solid rgba(139,92,246,.3); }
+    .stack-entry.opp-entry { border-color: rgba(248,113,113,.45); background: rgba(248,113,113,.06); }
+    .stack-img { width: 34px; border-radius: 4px; flex-shrink: 0; box-shadow: 0 2px 6px rgba(0,0,0,.6); }
+    .stack-name { font-size: 12px; font-weight: 700; line-height: 1.2; }
+    .stack-type { font-size: 10px; color: var(--text2); margin-top: 1px; }
+    .stack-who  { font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 4px; white-space: nowrap; flex-shrink: 0; }
+    .stack-who.mine { background: rgba(139,92,246,.18); color: var(--accent2); }
+    .stack-who.opp  { background: rgba(248,113,113,.18); color: var(--red); }
+    .stack-acts { display: flex; gap: 5px; margin-left: auto; flex-shrink: 0; }
+    .stack-btn { padding: 4px 10px; border-radius: 5px; font-size: 11px; font-weight: 700; border: 1px solid var(--border); background: var(--surface2); color: var(--text2); cursor: pointer; white-space: nowrap; transition: all .12s; }
+    .stack-btn.accept { border-color: var(--green);  color: var(--green);  background: rgba(74,222,128,.1); }
+    .stack-btn.accept:hover { background: rgba(74,222,128,.22); }
+    .stack-btn.counter{ border-color: var(--red);    color: var(--red);    background: rgba(248,113,113,.1); }
+    .stack-btn.counter:hover { background: rgba(248,113,113,.22); }
+    .stack-btn.cancel { border-color: var(--border); color: var(--text2); }
+    .stack-btn.cancel:hover { border-color: var(--accent); color: var(--text); }
+    @keyframes stackPulse { 0%,100%{border-color:rgba(139,92,246,.38)} 50%{border-color:rgba(139,92,246,.9)} }
+    .stack-zone.active { animation: stackPulse 1.4s ease-in-out infinite; }
+
+    /* ── Library modal ── */
+    .lib-modal-box { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 0; max-width: 680px; width: 100%; max-height: 92vh; display: flex; flex-direction: column; overflow: hidden; }
+    .lib-tabs { display: flex; border-bottom: 1px solid var(--border); }
+    .lib-tab { flex: 1; padding: 10px 6px; font-size: 12px; font-weight: 700; background: transparent; color: var(--text2); border: none; border-bottom: 3px solid transparent; cursor: pointer; transition: all .12s; }
+    .lib-tab:hover { color: var(--text); }
+    .lib-tab.active { color: var(--accent); border-bottom-color: var(--accent); background: rgba(196,154,42,.06); }
+    .lib-body { flex: 1; min-height: 0; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 12px; }
+    .lib-search { width: 100%; background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; color: var(--text); font-size: 13px; }
+    .lib-search:focus { outline: none; border-color: var(--accent2); }
+    .lib-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+    .lib-card-item { display: flex; flex-direction: column; align-items: center; gap: 4px; cursor: pointer; border: 2px solid transparent; border-radius: 8px; padding: 3px; transition: border-color .1s; }
+    .lib-card-item:hover { border-color: var(--accent); }
+    .lib-card-item img { width: 80px; border-radius: 6px; }
+    .lib-card-item .lib-name { font-size: 9px; color: var(--text2); text-align: center; max-width: 80px; line-height: 1.3; }
+    .lib-card-no-img { width: 80px; height: 112px; border-radius: 6px; background: var(--surface2); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; font-size: 9px; color: var(--text2); text-align: center; padding: 4px; line-height: 1.3; }
+    /* Scry */
+    .scry-card { display: flex; align-items: center; gap: 10px; padding: 8px; background: var(--surface2); border-radius: 8px; border: 1px solid var(--border); }
+    .scry-card img { width: 54px; border-radius: 5px; }
+    .scry-card .scry-name { flex: 1; font-size: 12px; font-weight: 600; }
+    .scry-card .scry-type { font-size: 10px; color: var(--text2); }
+    .scry-btn-group { display: flex; gap: 4px; }
+    .scry-btn { padding: 4px 10px; border-radius: 5px; font-size: 11px; font-weight: 700; border: 1px solid var(--border); background: var(--surface); color: var(--text2); cursor: pointer; }
+    .scry-btn.top-sel  { background: rgba(74,222,128,.18); border-color: var(--green);  color: var(--green); }
+    .scry-btn.bot-sel  { background: rgba(248,113,113,.18); border-color: var(--red);   color: var(--red); }
+    /* Mill / number input */
+    .num-row { display: flex; align-items: center; gap: 10px; }
+    .num-input { width: 80px; background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; color: var(--text); font-size: 20px; font-weight: 800; text-align: center; }
+    .num-input:focus { outline: none; border-color: var(--accent); }
+
+    /* ── Card zoom overlay ── */
+    .card-zoom-bg {
+      position: fixed; inset: 0; z-index: 800; display: flex; align-items: center; justify-content: center;
+      background: rgba(0,0,0,.88); cursor: pointer; animation: fadeIn .12s ease;
+    }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    .card-zoom-img { max-height: 88vh; max-width: 50vw; border-radius: 16px; box-shadow: 0 24px 80px rgba(0,0,0,.95); pointer-events: none; }
+    .card-zoom-hint { position: absolute; bottom: 18px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,.7); border: 1px solid var(--border); border-radius: 8px; padding: 5px 14px; font-size: 11px; color: var(--text2); pointer-events: none; white-space: nowrap; }
+    .card-zoom-actions { position: absolute; right: 18px; top: 50%; transform: translateY(-50%); display: flex; flex-direction: column; gap: 8px; }
+    .card-zoom-actions button { padding: 8px 14px; border-radius: 8px; font-size: 12px; font-weight: 700; background: var(--surface); border: 1px solid var(--border); color: var(--text); cursor: pointer; transition: all .12s; white-space: nowrap; }
+    .card-zoom-actions button:hover { border-color: var(--accent); color: var(--accent); }
+    .card-zoom-name { position: absolute; bottom: 50px; left: 50%; transform: translateX(-50%); font-size: 13px; font-weight: 700; color: var(--text); background: rgba(0,0,0,.7); border: 1px solid var(--border); border-radius: 7px; padding: 4px 14px; pointer-events: none; white-space: nowrap; max-width: 90vw; overflow: hidden; text-overflow: ellipsis; }
+
+    /* ── Zone piles column ── */
+    .zone-col { flex: 0 0 78px; display: flex; flex-direction: column; gap: 6px; padding: 5px 4px; border-left: 1px solid rgba(155,108,38,.15); background: rgba(0,0,0,.15); overflow: hidden; align-items: center; }
+    .zone-pile-wrap { display: flex; flex-direction: column; align-items: center; gap: 3px; cursor: pointer; flex-shrink: 0; }
+    .zone-pile-wrap:hover .pile-img { box-shadow: 0 0 10px rgba(196,154,42,.7); }
+    .pile-img { display: block; width: 54px; border-radius: 5px; box-shadow: 0 3px 8px rgba(0,0,0,.7); }
+    .pile-back { width: 54px; height: 76px; border-radius: 5px; background: linear-gradient(135deg,#1a0e00,#3a2010,#1a0e00); border: 1px solid rgba(155,108,38,.5); box-shadow: 0 3px 8px rgba(0,0,0,.7); display: flex; align-items: center; justify-content: center; font-size: 18px; }
+    .pile-empty { width: 54px; height: 76px; border-radius: 5px; border: 1px dashed rgba(155,108,38,.25); display: flex; align-items: center; justify-content: center; font-size: 18px; opacity: .4; }
+    .pile-label { font-size: 9px; font-weight: 700; color: var(--text2); text-transform: uppercase; letter-spacing: .4px; }
+    .pile-count { font-size: 11px; font-weight: 800; color: var(--text); background: rgba(0,0,0,.7); border-radius: 4px; padding: 0 5px; }
+    .zone-col-label { font-size: 9px; font-weight: 700; color: var(--text2); text-transform: uppercase; letter-spacing: .5px; padding: 2px 0; opacity: .6; }
+
+    @media (max-width: 640px) {
+      .bf.lands { flex: 0 0 72px; }
+      .zone-col { flex: 0 0 62px; }
+      .pile-img, .pile-back, .pile-empty { width: 44px; }
+      .pile-back, .pile-empty { height: 62px; }
+      .bf-card img, .bf-card .no-img { width: 52px; }
+      .bf-card .no-img { height: 72px; }
+      .hand-card img, .hand-card .no-img { width: 54px; }
+      .hand-card .no-img { height: 76px; }
+      .log-panel { display: none; }
+      .card-zoom-img { max-width: 85vw; }
+      .card-zoom-actions { right: 6px; }
+    }
+  </style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect, useReducer, useRef, useCallback, useMemo } = React;
+
+/* ═══════════════════════════════════════════════
+   UTILITIES
+═══════════════════════════════════════════════ */
+const uid = () => Math.random().toString(36).slice(2, 10);
+const shuffle = arr => {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+};
+
+const CACHE_KEY = 'mtg_card_cache_v3';
+function readCache() { try { return JSON.parse(localStorage.getItem(CACHE_KEY) || '{}'); } catch { return {}; } }
+
+async function fetchCard(set, num) {
+  const key = `${set.toLowerCase()}_${num}`;
+  const cached = readCache()[key];
+  if (cached && Date.now() - cached.at < 86400000) return { ...cached.d, _c: true };
+  try {
+    const r = await fetch(`https://api.scryfall.com/cards/${set.toLowerCase()}/${num}`);
+    const d = await r.json();
+    if (d.object === 'error') return null;
+    const slim = {
+      imgNormal: d.image_uris?.normal || d.card_faces?.[0]?.image_uris?.normal || '',
+      imgSmall:  d.image_uris?.small  || d.card_faces?.[0]?.image_uris?.small  || '',
+      typeLine:  d.type_line || '',
+      manaCost:  d.mana_cost || d.card_faces?.[0]?.mana_cost || '',
+    };
+    const nc = readCache(); nc[key] = { d: slim, at: Date.now() };
+    try { localStorage.setItem(CACHE_KEY, JSON.stringify(nc)); } catch {}
+    return slim;
+  } catch { return null; }
+}
+
+async function expandDeck(entries, onProgress) {
+  const cards = [];
+  for (let i = 0; i < entries.length; i++) {
+    const e = entries[i];
+    onProgress(i + 1, entries.length);
+    const d = await fetchCard(e.set, e.number);
+    for (let j = 0; j < e.qty; j++) {
+      cards.push({ uid: uid(), name: e.name, img: d?.imgNormal || '', typeLine: d?.typeLine || '', manaCost: d?.manaCost || '', setCode: (e.set||'').toUpperCase(), number: e.number });
+    }
+    if (d && !d._c) await new Promise(r => setTimeout(r, 70));
+  }
+  return cards;
+}
+
+const isLand = c => (c.typeLine || '').toLowerCase().includes('land');
+
+/* ═══════════════════════════════════════════════
+   GAME REDUCER
+   [EXTEND] Agregar nuevas acciones aquí
+═══════════════════════════════════════════════ */
+const INIT = { life: 20, poison: 0, library: [], hand: [], battlefield: [], graveyard: [], exile: [], stack: [], phase: 'main1', turnNumber: 1, isMyTurn: false };
+
+// True if card resolves to battlefield (not instant/sorcery)
+const resolveToField = c => {
+  const t = (c.typeLine || '').toLowerCase();
+  return !t.includes('instant') && !t.includes('sorcery');
+};
+
+function reducer(state, action) {
+  switch (action.type) {
+    case 'INIT_DECK':
+      return { ...INIT, library: shuffle(action.cards) };
+    case 'SET_TURN':
+      return { ...state, turnNumber: action.n, isMyTurn: action.mine };
+    case 'SET_PHASE':
+      return { ...state, phase: action.phase };
+    case 'DRAW': {
+      if (!state.library.length) return state;
+      const [card, ...lib] = state.library;
+      return { ...state, library: lib, hand: [...state.hand, card] };
+    }
+    case 'DRAW_N': {
+      const n = Math.min(action.n, state.library.length);
+      return { ...state, library: state.library.slice(n), hand: [...state.hand, ...state.library.slice(0, n)] };
+    }
+    case 'PLAY': {
+      // Lands only — bypass the stack
+      const card = state.hand.find(c => c.uid === action.uid);
+      if (!card) return state;
+      return {
+        ...state,
+        hand: state.hand.filter(c => c.uid !== action.uid),
+        battlefield: [...state.battlefield, { ...card, tapped: false, counters: [], summoningSick: false, attacking: false, blocking: false }],
+      };
+    }
+    case 'CAST': {
+      // Non-land: goes to the stack to await opponent confirmation
+      const card = state.hand.find(c => c.uid === action.uid);
+      if (!card) return state;
+      return { ...state, hand: state.hand.filter(c => c.uid !== action.uid), stack: [...state.stack, card] };
+    }
+    case 'STACK_RESOLVE': {
+      // Opponent accepted — card resolves
+      const card = state.stack.find(c => c.uid === action.uid);
+      if (!card) return state;
+      const newStack = state.stack.filter(c => c.uid !== action.uid);
+      if (resolveToField(card)) {
+        return { ...state, stack: newStack, battlefield: [...state.battlefield, { ...card, tapped: false, counters: [], summoningSick: !isLand(card), attacking: false, blocking: false }] };
+      }
+      return { ...state, stack: newStack, graveyard: [...state.graveyard, card] };
+    }
+    case 'STACK_COUNTER': {
+      // Opponent countered — card goes to graveyard
+      const card = state.stack.find(c => c.uid === action.uid);
+      if (!card) return state;
+      return { ...state, stack: state.stack.filter(c => c.uid !== action.uid), graveyard: [...state.graveyard, card] };
+    }
+    case 'STACK_CANCEL': {
+      // Caster cancels before opponent responds — returns to hand
+      const card = state.stack.find(c => c.uid === action.uid);
+      if (!card) return state;
+      return { ...state, stack: state.stack.filter(c => c.uid !== action.uid), hand: [...state.hand, card] };
+    }
+    case 'TAP':
+      return { ...state, battlefield: state.battlefield.map(c => c.uid === action.uid ? { ...c, tapped: !c.tapped } : c) };
+    case 'UNTAP_ALL':
+      return { ...state, battlefield: state.battlefield.map(c => ({ ...c, tapped: false, summoningSick: false, attacking: false, blocking: false })) };
+    case 'TOGGLE_ATTACK':
+      return { ...state, battlefield: state.battlefield.map(c => c.uid === action.uid ? { ...c, attacking: !c.attacking, tapped: !c.attacking } : c) };
+    case 'TOGGLE_BLOCK':
+      return { ...state, battlefield: state.battlefield.map(c => c.uid === action.uid ? { ...c, blocking: !c.blocking } : c) };
+    case 'MOVE': {
+      const zones = ['battlefield', 'hand', 'graveyard', 'exile', 'stack'];
+      const src = zones.find(z => state[z].some(c => c.uid === action.uid));
+      if (!src) return state;
+      const card = state[src].find(c => c.uid === action.uid);
+      const clean = { ...card, tapped: false, counters: [], summoningSick: true, attacking: false, blocking: false };
+      const next = { ...state, [src]: state[src].filter(c => c.uid !== action.uid) };
+      if (action.to === 'library_top')    return { ...next, library: [clean, ...state.library] };
+      if (action.to === 'library_bottom') return { ...next, library: [...state.library, clean] };
+      return { ...next, [action.to]: [...next[action.to], action.to === 'battlefield' ? { ...clean, summoningSick: true } : clean] };
+    }
+    case 'ADD_COUNTER':
+      return { ...state, battlefield: state.battlefield.map(c => {
+        if (c.uid !== action.uid) return c;
+        const ex = c.counters.find(ct => ct.type === action.ct);
+        return { ...c, counters: ex ? c.counters.map(ct => ct.type === action.ct ? { ...ct, n: ct.n + 1 } : ct) : [...c.counters, { type: action.ct, n: 1 }] };
+      })};
+    case 'REMOVE_COUNTER':
+      return { ...state, battlefield: state.battlefield.map(c => {
+        if (c.uid !== action.uid) return c;
+        return { ...c, counters: c.counters.map(ct => ct.type === action.ct ? { ...ct, n: ct.n - 1 } : ct).filter(ct => ct.n > 0) };
+      })};
+    case 'CHANGE_LIFE':   return { ...state, life: state.life + action.d };
+    case 'CHANGE_POISON': return { ...state, poison: Math.max(0, state.poison + action.d) };
+    case 'SHUFFLE':       return { ...state, library: shuffle([...state.library]) };
+    case 'MULLIGAN': {
+      const all = shuffle([...state.hand, ...state.library]);
+      const n = Math.max(0, state.hand.length - 1);
+      return { ...state, library: all.slice(n), hand: all.slice(0, n) };
+    }
+    // Mill: top N cards → graveyard
+    case 'MILL': {
+      const n = Math.min(action.n, state.library.length);
+      return { ...state, library: state.library.slice(n), graveyard: [...state.graveyard, ...state.library.slice(0, n)] };
+    }
+    // Scry: reorder top N (action.keep=[uids top], action.bottom=[uids bottom])
+    case 'SCRY': {
+      const top = action.top.map(id => state.library.find(c => c.uid === id)).filter(Boolean);
+      const bot = action.bottom.map(id => state.library.find(c => c.uid === id)).filter(Boolean);
+      const rest = state.library.slice(action.top.length + action.bottom.length);
+      return { ...state, library: [...top, ...rest, ...bot] };
+    }
+    // Tutor: move specific library card to destination
+    case 'TUTOR': {
+      const card = state.library.find(c => c.uid === action.uid);
+      if (!card) return state;
+      const lib = state.library.filter(c => c.uid !== action.uid);
+      if (action.to === 'hand') return { ...state, library: action.shuffle ? shuffle(lib) : lib, hand: [...state.hand, card] };
+      if (action.to === 'battlefield') return { ...state, library: action.shuffle ? shuffle(lib) : lib, battlefield: [...state.battlefield, { ...card, tapped: false, counters: [], summoningSick: !isLand(card), attacking: false, blocking: false }] };
+      return { ...state, library: action.shuffle ? shuffle(lib) : lib };
+    }
+    // Add a token to battlefield
+    case 'ADD_TOKEN': {
+      const token = { uid: uid(), name: action.name, typeLine: action.typeLine || '', img: '', manaCost: '', isToken: true, tapped: false, counters: action.counters || [], summoningSick: false, attacking: false, blocking: false };
+      return { ...state, battlefield: [...state.battlefield, token] };
+    }
+    default: return state;
+  }
+}
+
+/* State shared with opponent (hides hand) */
+function pub(s) {
+  return {
+    life: s.life, poison: s.poison, handCount: s.hand.length,
+    battlefield: s.battlefield, graveyard: s.graveyard, exile: s.exile,
+    libraryCount: s.library.length, phase: s.phase, turnNumber: s.turnNumber, isMyTurn: s.isMyTurn,
+    stack: s.stack, // public — opponent can see what was cast
+  };
+}
+
+/* ═══════════════════════════════════════════════
+   CONSTANTS
+═══════════════════════════════════════════════ */
+const PHASES = [
+  { id:'untap',  lbl:'Desgirar' }, { id:'upkeep', lbl:'Mantenimiento' },
+  { id:'draw',   lbl:'Robar'    }, { id:'main1',  lbl:'Principal 1'   },
+  { id:'combat', lbl:'Combate'  }, { id:'main2',  lbl:'Principal 2'   },
+  { id:'end',    lbl:'Fin'      },
+];
+// [EXTEND] Add counter types here
+const CTRS = ['+1/+1','-1/-1','fiel','carga','veneno','maná','tiempo','+0/+1','+1/+0'];
+
+/* ═══════════════════════════════════════════════
+   COMPONENTS
+═══════════════════════════════════════════════ */
+
+/* Context Menu */
+function CtxMenu({ menu, onClose }) {
+  const ref = useRef();
+  useEffect(() => {
+    const fn = e => { if (ref.current && !ref.current.contains(e.target)) onClose(); };
+    document.addEventListener('mousedown', fn, true);
+    document.addEventListener('touchstart', fn, true);
+    return () => { document.removeEventListener('mousedown', fn, true); document.removeEventListener('touchstart', fn, true); };
+  }, [onClose]);
+  if (!menu) return null;
+  const left = Math.min(menu.x, window.innerWidth  - 180);
+  const top  = Math.min(menu.y, window.innerHeight - 60);
+  return (
+    <div ref={ref} className="ctx" style={{ left, top }} onContextMenu={e => e.preventDefault()}>
+      {menu.items.map((it, i) => {
+        if (it.type === 'sep')   return <div key={i} className="ctx-sep" />;
+        if (it.type === 'label') return <div key={i} className="ctx-label">{it.text}</div>;
+        return (
+          <div key={i} className={`ctx-item${it.danger ? ' danger' : ''}`} onClick={() => { it.fn(); onClose(); }}>
+            {it.icon && <span style={{ fontSize: 13 }}>{it.icon}</span>}
+            <span>{it.text}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/* Zone Modal */
+function ZoneModal({ title, cards, readOnly, onAction, onClose }) {
+  const [zoomCard, setZoomCard] = useState(null);
+  return (
+    <>
+      <div className="modal-bg" onClick={onClose}>
+        <div className="modal-box" onClick={e => e.stopPropagation()}>
+          <div className="modal-head">
+            <span style={{ fontFamily: "'Cinzel Decorative',serif", fontSize: 13 }}>{title} ({cards.length})</span>
+            <button className="act-btn" onClick={onClose}>✕</button>
+          </div>
+          {cards.length === 0
+            ? <div style={{ textAlign: 'center', color: 'var(--text2)', padding: 20, opacity: .5 }}>Zona vacía</div>
+            : <div className="modal-grid">
+                {[...cards].reverse().map(c => (
+                  <div key={c.uid} className="zone-card">
+                    <div style={{ position:'relative' }}>
+                      {c.img
+                        ? <img src={c.img} alt={c.name} onError={e => { e.target.style.display = 'none'; }}
+                            style={{ cursor:'pointer' }} onClick={() => setZoomCard(c)} />
+                        : <div style={{ width: 86, height: 120, background: 'var(--surface2)', borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: 'var(--text2)', textAlign: 'center', padding: 4, cursor:'pointer' }} onClick={() => setZoomCard(c)}>{c.name}</div>
+                      }
+                    </div>
+                    {!readOnly && onAction && (
+                      <button className="act-btn" style={{ fontSize:10, padding:'2px 6px', marginTop:2 }} onClick={() => onAction(c)}>Mover →</button>
+                    )}
+                    <span>{c.name}</span>
+                  </div>
+                ))}
+              </div>
+          }
+          <div style={{ fontSize:11, color:'var(--text2)', textAlign:'center', opacity:.55 }}>Clic en imagen = ver grande · {!readOnly ? '"Mover →" = mover' : 'Solo lectura'}</div>
+        </div>
+      </div>
+      {zoomCard && <CardZoom card={zoomCard} onClose={() => setZoomCard(null)} />}
+    </>
+  );
+}
+
+/* ── Library Modal (Buscar / Scry / Mill / Investigate) ── */
+function LibraryModal({ library, graveyard, onClose, onDispatch, onLog }) {
+  const [tab, setTab]       = useState('buscar');
+  const [search, setSearch] = useState('');
+  const [scryN, setScryN]   = useState(3);
+  const [scryCards, setScryCards] = useState(null); // null = not started
+  const [scryDest, setScryDest]   = useState({}); // uid → 'top'|'bottom'
+  const [millN, setMillN]   = useState(3);
+  const [zoom, setZoom]     = useState(null);
+  const [tutorCard, setTutorCard] = useState(null);
+
+  const TABS = [
+    { id:'buscar', lbl:'🔍 Buscar' },
+    { id:'scry',   lbl:'👁 Scry' },
+    { id:'mill',   lbl:'💀 Mill' },
+    { id:'investigate', lbl:'🔎 Investigar' },
+  ];
+
+  /* Search / Tutor */
+  const filtered = useMemo(() => {
+    const q = search.toLowerCase().trim();
+    return q ? library.filter(c => c.name.toLowerCase().includes(q)) : library;
+  }, [library, search]);
+
+  const doTutor = (card, to, doShuffle) => {
+    onDispatch({ type:'TUTOR', uid:card.uid, to, shuffle: doShuffle });
+    onLog(`busca ${card.name} → ${to === 'hand' ? 'mano' : 'campo'}${doShuffle ? ' (baraja)' : ''}`);
+    setTutorCard(null);
+    onClose();
+  };
+
+  /* Scry */
+  const startScry = () => {
+    const top = library.slice(0, scryN);
+    setScryCards(top);
+    const init = {};
+    top.forEach(c => { init[c.uid] = 'top'; });
+    setScryDest(init);
+  };
+
+  const confirmScry = () => {
+    const topUids = scryCards.filter(c => scryDest[c.uid] === 'top').map(c => c.uid);
+    const botUids = scryCards.filter(c => scryDest[c.uid] === 'bottom').map(c => c.uid);
+    onDispatch({ type:'SCRY', top: topUids, bottom: botUids });
+    onLog(`hace scry ${scryN} (${topUids.length} arriba, ${botUids.length} abajo)`);
+    onClose();
+  };
+
+  /* Mill */
+  const doMill = () => {
+    const n = Math.min(millN, library.length);
+    onDispatch({ type:'MILL', n });
+    onLog(`hace mill ${n}`);
+    onClose();
+  };
+
+  /* Investigate */
+  const doInvestigate = () => {
+    onDispatch({ type:'ADD_TOKEN', name:'Pista', typeLine:'Artifact — Clue', counters:[] });
+    onLog('investiga — ficha Pista al campo');
+    onClose();
+  };
+
+  return (
+    <>
+      <div className="modal-bg" onClick={onClose}>
+        <div className="lib-modal-box" onClick={e => e.stopPropagation()}>
+          {/* Header */}
+          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'12px 16px 0' }}>
+            <span style={{ fontFamily:"'Cinzel Decorative',serif", fontSize:13 }}>📚 Biblioteca ({library.length})</span>
+            <button className="act-btn" onClick={onClose}>✕</button>
+          </div>
+          {/* Tabs */}
+          <div className="lib-tabs">
+            {TABS.map(t => <button key={t.id} className={`lib-tab${tab===t.id?' active':''}`} onClick={() => { setTab(t.id); setScryCards(null); setTutorCard(null); }}>{t.lbl}</button>)}
+          </div>
+
+          {/* ── BUSCAR ── */}
+          {tab === 'buscar' && (
+            <div className="lib-body">
+              <input className="lib-search" placeholder="Buscar carta por nombre…" value={search} onChange={e => setSearch(e.target.value)} autoFocus />
+              <div style={{ fontSize:11, color:'var(--text2)', opacity:.6 }}>
+                {filtered.length} carta{filtered.length !== 1 ? 's' : ''} · Clic = ver · doble clic = tutorear a mano
+              </div>
+              <div className="lib-grid">
+                {filtered.map(c => (
+                  <div key={c.uid} className="lib-card-item"
+                    onClick={() => setZoom(c)}
+                    onDoubleClick={() => setTutorCard(c)}>
+                    {c.img
+                      ? <img src={c.img} alt={c.name} onError={e => e.target.style.display='none'} />
+                      : <div className="lib-card-no-img">{c.name}</div>
+                    }
+                    <div className="lib-name">{c.name}</div>
+                  </div>
+                ))}
+                {filtered.length === 0 && <div style={{ color:'var(--text2)', opacity:.5, padding:12 }}>Sin resultados</div>}
+              </div>
+            </div>
+          )}
+
+          {/* ── SCRY ── */}
+          {tab === 'scry' && (
+            <div className="lib-body">
+              {!scryCards ? (
+                <>
+                  <div style={{ fontSize:13, color:'var(--text2)' }}>Mira las X cartas de arriba y elige cuáles quedan arriba o van al fondo.</div>
+                  <div className="num-row">
+                    <span style={{ fontSize:13 }}>Ver</span>
+                    <input className="num-input" type="number" min={1} max={Math.max(1, library.length)} value={scryN} onChange={e => setScryN(Math.max(1, Math.min(library.length, +e.target.value)))} />
+                    <span style={{ fontSize:13 }}>carta{scryN !== 1 ? 's' : ''}</span>
+                  </div>
+                  <button className="btn btn-primary" disabled={library.length === 0} onClick={startScry}>👁 Comenzar Scry {scryN}</button>
+                </>
+              ) : (
+                <>
+                  <div style={{ fontSize:12, color:'var(--text2)' }}>Verde = queda arriba · Rojo = va al fondo</div>
+                  <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+                    {scryCards.map((c, i) => (
+                      <div key={c.uid} className="scry-card">
+                        {c.img ? <img src={c.img} alt={c.name} /> : <div style={{ width:54, height:76, background:'var(--surface)', borderRadius:5, border:'1px solid var(--border)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:9, color:'var(--text2)', textAlign:'center', padding:3 }}>{c.name}</div>}
+                        <div style={{ flex:1 }}>
+                          <div className="scry-name">{c.name}</div>
+                          <div className="scry-type">{c.typeLine}</div>
+                        </div>
+                        <div className="scry-btn-group">
+                          <button className={`scry-btn${scryDest[c.uid]==='top'?' top-sel':''}`} onClick={() => setScryDest(d => ({...d, [c.uid]:'top'}))}>▲ Arriba</button>
+                          <button className={`scry-btn${scryDest[c.uid]==='bottom'?' bot-sel':''}`} onClick={() => setScryDest(d => ({...d, [c.uid]:'bottom'}))}>▼ Abajo</button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <button className="btn btn-primary" onClick={confirmScry}>✔ Confirmar Scry</button>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* ── MILL ── */}
+          {tab === 'mill' && (
+            <div className="lib-body">
+              <div style={{ fontSize:13, color:'var(--text2)' }}>Envía las X cartas de arriba del mazo al cementerio.</div>
+              <div className="num-row">
+                <span style={{ fontSize:13 }}>Mill</span>
+                <input className="num-input" type="number" min={1} max={Math.max(1, library.length)} value={millN} onChange={e => setMillN(Math.max(1, Math.min(library.length, +e.target.value)))} />
+                <span style={{ fontSize:13 }}>carta{millN !== 1 ? 's' : ''}</span>
+              </div>
+              {library.length > 0 && (
+                <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
+                  {library.slice(0, millN).map(c => (
+                    <div key={c.uid} style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:3 }}>
+                      {c.img ? <img src={c.img} alt={c.name} style={{ width:52, borderRadius:5 }} onError={e => e.target.style.display='none'} /> : <div style={{ width:52, height:72, background:'var(--surface2)', borderRadius:5, display:'flex', alignItems:'center', justifyContent:'center', fontSize:8, color:'var(--text2)', textAlign:'center', padding:2 }}>{c.name}</div>}
+                      <span style={{ fontSize:9, color:'var(--text2)' }}>{c.name.slice(0,12)}{c.name.length>12?'…':''}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <button className="btn btn-danger" disabled={library.length === 0} onClick={doMill}>💀 Mill {Math.min(millN, library.length)}</button>
+            </div>
+          )}
+
+          {/* ── INVESTIGATE ── */}
+          {tab === 'investigate' && (
+            <div className="lib-body" style={{ alignItems:'center', gap:18, paddingTop:24 }}>
+              <div style={{ fontSize:40 }}>🔎</div>
+              <div style={{ textAlign:'center' }}>
+                <div style={{ fontWeight:700, fontSize:15, marginBottom:6 }}>Investigar</div>
+                <div style={{ fontSize:12, color:'var(--text2)', lineHeight:1.6 }}>
+                  Pone una ficha <strong>Pista</strong> (Artefacto — Pista) en tu campo.<br/>
+                  <em>«2, sacrificar esta ficha: roba una carta.»</em>
+                </div>
+              </div>
+              <button className="btn btn-primary" style={{ fontSize:15, padding:'12px 28px' }} onClick={doInvestigate}>🔎 Investigar</button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Tutor destination picker */}
+      {tutorCard && (
+        <div className="modal-bg" onClick={() => setTutorCard(null)} style={{ zIndex: 810 }}>
+          <div className="card-panel" style={{ maxWidth: 320 }} onClick={e => e.stopPropagation()}>
+            <div className="panel-title">Tutorear: {tutorCard.name}</div>
+            {tutorCard.img && <img src={tutorCard.img} alt={tutorCard.name} style={{ width:120, borderRadius:8, alignSelf:'center' }} />}
+            <button className="btn btn-primary"   onClick={() => doTutor(tutorCard, 'hand',        true )}>✋ A la mano (baraja el resto)</button>
+            <button className="btn btn-secondary" onClick={() => doTutor(tutorCard, 'hand',        false)}>✋ A la mano (sin barajar)</button>
+            <button className="btn btn-secondary" onClick={() => doTutor(tutorCard, 'battlefield', true )}>⚡ Al campo (baraja el resto)</button>
+            <button className="btn btn-danger"    onClick={() => setTutorCard(null)}>✕ Cancelar</button>
+          </div>
+        </div>
+      )}
+
+      {/* Zoom inside library modal */}
+      {zoom && <CardZoom card={zoom} onClose={() => setZoom(null)} />}
+    </>
+  );
+}
+
+/* Card Zoom Overlay — clic en bg o ESC para cerrar */
+function CardZoom({ card, onClose, onTap, onCtx }) {
+  useEffect(() => {
+    const fn = e => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', fn);
+    return () => document.removeEventListener('keydown', fn);
+  }, [onClose]);
+  return (
+    <div className="card-zoom-bg" onClick={onClose}>
+      {card.img
+        ? <img className="card-zoom-img" src={card.img} alt={card.name} onClick={onClose} />
+        : <div style={{ background:'var(--surface)', border:'1px solid var(--border)', borderRadius:16, padding:28, minWidth:200, textAlign:'center', cursor:'default' }} onClick={e => e.stopPropagation()}>
+            <div style={{ fontWeight:700, fontSize:16, marginBottom:6 }}>{card.name}</div>
+            <div style={{ fontSize:12, color:'var(--text2)' }}>{card.typeLine}</div>
+            {card.manaCost && <div style={{ fontSize:12, color:'var(--accent)', marginTop:6 }}>{card.manaCost}</div>}
+          </div>
+      }
+      {card.name && <div className="card-zoom-name">{card.name}</div>}
+      {(onTap || onCtx) && (
+        <div className="card-zoom-actions" onClick={e => e.stopPropagation()}>
+          {onTap && (
+            <button onClick={() => { onTap(card.uid); onClose(); }}>
+              {card.tapped ? '↩️ Desgirar' : '↪️ Girar'}
+            </button>
+          )}
+          {onCtx && (
+            <button onClick={e => { const rect = e.target.getBoundingClientRect(); onCtx({ clientX: rect.left - 170, clientY: rect.top }, card); onClose(); }}>
+              ⚙️ Opciones
+            </button>
+          )}
+        </div>
+      )}
+      <div className="card-zoom-hint">ESC o clic para cerrar</div>
+    </div>
+  );
+}
+
+/* Zone Column — mazo y cementerio visual */
+function ZoneCol({ library, libraryCount, graveyard, onLibClick, onGyClick, readOnly }) {
+  const topGy = graveyard && graveyard.length > 0 ? graveyard[graveyard.length - 1] : null;
+  const count = libraryCount !== undefined ? libraryCount : (library ? library.length : 0);
+  return (
+    <div className="zone-col">
+      {/* Mazo */}
+      <div className="zone-pile-wrap" onClick={onLibClick} title={`Biblioteca (${count})`}>
+        <div className="pile-label">Mazo</div>
+        {count > 0
+          ? <div className="pile-back">🎴</div>
+          : <div className="pile-empty">📚</div>
+        }
+        <div className="pile-count">{count}</div>
+      </div>
+      {/* Cementerio */}
+      <div className="zone-pile-wrap" onClick={onGyClick} title={`Cementerio (${graveyard?.length ?? 0})`}>
+        <div className="pile-label">Cemen.</div>
+        {topGy && topGy.img
+          ? <img className="pile-img" src={topGy.img} alt={topGy.name} onError={e => { e.target.style.display='none'; }} />
+          : (topGy
+            ? <div className="pile-back" style={{ fontSize:10, color:'var(--text2)', textAlign:'center', padding:3, lineHeight:1.2 }}>{topGy.name}</div>
+            : <div className="pile-empty">💀</div>
+          )
+        }
+        <div className="pile-count">{graveyard?.length ?? 0}</div>
+      </div>
+    </div>
+  );
+}
+
+/* Battlefield Card
+   • Clic simple     → zoom (ver carta grande)
+   • Doble clic      → girar/desgirar (solo mis cartas)
+   • Clic derecho    → menú de opciones (solo mis cartas)
+*/
+function BfCard({ card, onZoom, onTap, onCtx, readOnly }) {
+  const clickTimer = useRef(null);
+  const cls = ['bf-card', card.tapped ? 'tapped' : '', card.attacking ? 'attacking' : '', card.blocking ? 'blocking' : '', (card.summoningSick && !isLand(card)) ? 'sickness' : ''].filter(Boolean).join(' ');
+
+  const handleClick = e => {
+    e.preventDefault();
+    if (clickTimer.current) {
+      // double click → tap
+      clearTimeout(clickTimer.current);
+      clickTimer.current = null;
+      if (!readOnly && onTap) onTap(card.uid);
+    } else {
+      // delay single click to detect double
+      clickTimer.current = setTimeout(() => {
+        clickTimer.current = null;
+        onZoom && onZoom(card);
+      }, 220);
+    }
+  };
+
+  return (
+    <div className={cls}
+      onClick={handleClick}
+      onContextMenu={e => { e.preventDefault(); !readOnly && onCtx && onCtx(e, card); }}
+    >
+      {card.img ? <img src={card.img} alt={card.name} /> : <div className="no-img">{card.name}</div>}
+      {card.counters && card.counters.length > 0 && (
+        <div className="ctrs">{card.counters.map(ct => <span key={ct.type} className="ctr-badge">{ct.type}×{ct.n}</span>)}</div>
+      )}
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════
+   GAME SCREEN
+═══════════════════════════════════════════════ */
+function GameScreen({ conn, isHost, myDeckName, oppDeckName, initialCards, onExit }) {
+  const [state, dispatch] = useReducer(reducer, INIT);
+  const [oppState, setOppState]   = useState(null);
+  const [connected, setConnected] = useState(conn ? conn.open !== false : false);
+  const [ctx, setCtx]             = useState(null);
+  const [modal, setModal]         = useState(null);
+  const [log, setLog]             = useState([]);
+  const [lifeEdit, setLifeEdit]   = useState(false);
+  const [lifeVal, setLifeVal]     = useState('');
+  const [zoom, setZoom]           = useState(null); // card object to show big
+  const [libModal, setLibModal]   = useState(false);
+  const inited = useRef(false);
+
+  /* Init deck */
+  useEffect(() => {
+    if (initialCards && !inited.current) {
+      inited.current = true;
+      dispatch({ type: 'INIT_DECK', cards: initialCards });
+    }
+  }, [initialCards]);
+
+  /* First turn */
+  useEffect(() => {
+    if (isHost) { dispatch({ type: 'SET_TURN', n: 1, mine: true  }); addLog('🎲 Turno 1 — juegas primero', 'sys'); }
+    else         { dispatch({ type: 'SET_TURN', n: 1, mine: false }); addLog('⏳ Turno 1 — espera tu turno', 'sys'); }
+  }, [isHost]);
+
+  /* Sync state to peer */
+  useEffect(() => {
+    if (!conn || !inited.current) return;
+    try { if (conn.open) conn.send({ type: 'STATE', state: pub(state) }); } catch {}
+  }, [state, conn]);
+
+  /* Incoming messages */
+  useEffect(() => {
+    if (!conn) return;
+    const onData = d => {
+      if (d.type === 'STATE')      setOppState(d.state);
+      if (d.type === 'LOG')        addLog(`🔵 ${d.msg}`, 'opp');
+      if (d.type === 'PASS_TURN') { dispatch({ type: 'SET_TURN', n: d.n, mine: true }); addLog(`⚔️ Turno ${d.n} — tu turno`, 'sys'); }
+      // Opponent responded to my spell
+      if (d.type === 'STACK_OK') {
+        dispatch({ type: 'STACK_RESOLVE', uid: d.uid });
+        addLog(`✅ ${d.name} resuelve`, 'sys');
+      }
+      if (d.type === 'STACK_COUNTER_MSG') {
+        dispatch({ type: 'STACK_COUNTER', uid: d.uid });
+        addLog(`🛡️ ${d.name} fue respondido`, 'sys');
+      }
+    };
+    const onClose = () => { setConnected(false); addLog('⚠️ Oponente desconectado', 'sys'); };
+    conn.on('data',  onData);
+    conn.on('close', onClose);
+    conn.on('error', onClose);
+    if (conn.open) setConnected(true);
+    return () => { try { conn.off('data', onData); conn.off('close', onClose); conn.off('error', onClose); } catch {} };
+  }, [conn]);
+
+  /* ── Helpers ── */
+  const addLog = (msg, type = 'mine') => setLog(prev => [...prev.slice(-30), { msg, type, id: uid() }]);
+
+  const sendLog = msg => {
+    addLog(msg, 'mine');
+    if (conn && conn.open) try { conn.send({ type: 'LOG', msg }); } catch {}
+  };
+
+  const act = (action, logMsg) => { dispatch(action); if (logMsg) sendLog(logMsg); };
+
+  const draw    = () => { if (!state.library.length) { addLog('📚 Biblioteca vacía', 'sys'); return; } act({ type: 'DRAW' }, 'robó una carta'); };
+  const untapAll = () => act({ type: 'UNTAP_ALL' }, 'desgira todos sus permanentes');
+
+  /* Play a card from hand:
+     - Lands → directly to battlefield (no stack)
+     - Everything else → stack, await opponent confirmation */
+  const playCard = (id) => {
+    const card = state.hand.find(c => c.uid === id);
+    if (!card) return;
+    if (isLand(card)) {
+      act({ type: 'PLAY', uid: id }, `juega ${card.name} (tierra)`);
+    } else {
+      act({ type: 'CAST', uid: id }, `lanza ${card.name}`);
+    }
+  };
+
+  /* My stack: opponent accepts → resolve */
+  const resolveStack = (uid, name) => {
+    act({ type: 'STACK_RESOLVE', uid }, `${name} resuelve`);
+  };
+  /* My stack: cancel cast → back to hand */
+  const cancelCast = (uid, name) => {
+    dispatch({ type: 'STACK_CANCEL', uid });
+    addLog(`↩ ${name} devuelta a la mano`, 'sys');
+  };
+  /* My stack: self-counter (solitario) */
+  const selfCounter = (uid, name) => {
+    act({ type: 'STACK_COUNTER', uid }, `${name} fue respondido`);
+  };
+
+  /* Opponent's stack actions (I respond) */
+  const acceptOppSpell = (uid, name) => {
+    if (conn && conn.open) try { conn.send({ type: 'STACK_OK', uid, name }); } catch {}
+    addLog(`✅ Acepta ${name}`, 'mine');
+    sendLog(`acepta ${name}`);
+  };
+  const counterOppSpell = (uid, name) => {
+    if (conn && conn.open) try { conn.send({ type: 'STACK_COUNTER_MSG', uid, name }); } catch {}
+    addLog(`⚡ Responde a ${name}`, 'mine');
+    sendLog(`responde a${name}`);
+  };
+
+  const tapCard = (id) => {
+    const cur = state.battlefield.find(c => c.uid === id);
+    act({ type: 'TAP', uid: id }, cur?.tapped ? `desgira ${cur?.name}` : `gira ${cur?.name}`);
+  };
+
+  const move = (id, to, name) => {
+    const Z = { graveyard:'cementerio', exile:'exilio', hand:'mano', battlefield:'campo', library_top:'top biblioteca', library_bottom:'fondo biblioteca' };
+    act({ type: 'MOVE', uid: id, to }, `${name} → ${Z[to]||to}`);
+  };
+
+  const changeLife = d => act({ type: 'CHANGE_LIFE', d }, `${d > 0 ? 'gana' : 'pierde'} ${Math.abs(d)} vida`);
+
+  const passTurn = () => {
+    const n = state.turnNumber + 1;
+    dispatch({ type: 'SET_TURN', n, mine: false });
+    dispatch({ type: 'SET_PHASE', phase: 'untap' });
+    if (conn && conn.open) try { conn.send({ type: 'PASS_TURN', n }); } catch {}
+    sendLog(`pasa el turno → T${n}`);
+  };
+
+  /* ── Context menu builders ── */
+  const midCtx = { x: window.innerWidth / 2 - 80, y: window.innerHeight / 2 };
+
+  const bfCtx = (e, card) => {
+    const cur = state.battlefield.find(c => c.uid === card.uid) || card;
+    const counterItems = CTRS.map(ct => ({ icon: '＋', text: ct, fn: () => { act({ type:'ADD_COUNTER', uid:card.uid, ct }, `+${ct} a ${card.name}`); } }));
+    const rmItems = cur.counters?.length ? [
+      { type:'sep' }, { type:'label', text:'Quitar contador' },
+      ...cur.counters.map(ct => ({ icon:'－', text:`${ct.type} (${ct.n})`, fn:()=>{ act({type:'REMOVE_COUNTER',uid:card.uid,ct:ct.type},`-${ct.type} de ${card.name}`); }})),
+    ] : [];
+    setCtx({ x: e.clientX, y: e.clientY, items: [
+      { type:'label', text: card.name },
+      { icon: cur.tapped ? '↩️':'↪️', text: cur.tapped ? 'Desgirar':'Girar', fn: () => tapCard(card.uid) },
+      { icon:'🔍', text:'Ver carta (zoom)',  fn:()=>setZoom(cur) },
+      { type:'sep' },
+      { icon:'⚔️', text: cur.attacking?'Quitar ataque':'Declarar atacante', fn:()=>{ act({type:'TOGGLE_ATTACK',uid:card.uid}, `${card.name} ${cur.attacking?'retira':'declara'} ataque`); }},
+      { icon:'🛡️', text: cur.blocking?'Quitar bloqueo':'Declarar bloqueador', fn:()=>{ act({type:'TOGGLE_BLOCK',uid:card.uid}, `${card.name} ${cur.blocking?'retira':'declara'} bloqueo`); }},
+      { type:'sep' }, { type:'label', text:'Agregar contador' },
+      ...counterItems, ...rmItems,
+      { type:'sep' },
+      { icon:'✋', text:'A la mano',          fn:()=>move(card.uid,'hand',card.name) },
+      { icon:'💀', text:'Al cementerio',       fn:()=>move(card.uid,'graveyard',card.name) },
+      { icon:'🌌', text:'Al exilio',           fn:()=>move(card.uid,'exile',card.name) },
+      { icon:'📚', text:'Top de biblioteca',   fn:()=>move(card.uid,'library_top',card.name) },
+      { icon:'📚', text:'Fondo de biblioteca', fn:()=>move(card.uid,'library_bottom',card.name) },
+    ]});
+  };
+
+  const handCtx = (e, card) => {
+    setCtx({ x: e.clientX, y: e.clientY, items: [
+      { type:'label', text: card.name },
+      { icon:'🔍', text:'Ver carta (zoom)',   fn:()=>setZoom(card) },
+      { type:'sep' },
+      { icon:'▶️', text: isLand(card) ? 'Jugar tierra' : 'Lanzar hechizo', fn:()=>playCard(card.uid) },
+      { icon:'💀', text:'Descartar',          fn:()=>move(card.uid,'graveyard',card.name) },
+      { icon:'🌌', text:'Exiliar',            fn:()=>move(card.uid,'exile',card.name) },
+      { icon:'📚', text:'Top de biblioteca',  fn:()=>move(card.uid,'library_top',card.name) },
+    ]});
+  };
+
+  const zoneCtxItems = card => [
+    { type:'label', text: card.name },
+    { icon:'✋', text:'A la mano',   fn:()=>move(card.uid,'hand',card.name) },
+    { icon:'⚡', text:'Al campo',    fn:()=>move(card.uid,'battlefield',card.name) },
+    { icon:'🌌', text:'Al exilio',   fn:()=>move(card.uid,'exile',card.name) },
+    { icon:'📚', text:'Top biblio',  fn:()=>move(card.uid,'library_top',card.name) },
+  ];
+
+  /* ── Split battlefield ── */
+  const spells  = state.battlefield.filter(c => !isLand(c));
+  const lands   = state.battlefield.filter(c =>  isLand(c));
+  const oppSp   = (oppState?.battlefield||[]).filter(c => !isLand(c));
+  const oppLand = (oppState?.battlefield||[]).filter(c =>  isLand(c));
+
+  const curPhase = PHASES.find(p => p.id === state.phase);
+
+  return (
+    <div className="game-root" onContextMenu={e => e.preventDefault()}>
+
+      {/* ── HEADER ── */}
+      <div className="game-header">
+        <span className="gh-logo">⚔ Mesa</span>
+        <div className="gh-sep" />
+        <div className={`conn-dot ${!conn ? 'off' : connected ? 'on' : 'off'}`} />
+        <span className="gh-pill">{!conn ? 'Solitario' : connected ? (oppState ? `vs ${oppDeckName||'Oponente'}` : 'Esperando…') : 'Desconectado'}</span>
+        <div className="gh-sep" />
+        <span className="gh-pill" style={{ color: 'var(--accent)' }}>T{state.turnNumber}</span>
+        <span className="gh-pill">{curPhase?.lbl || state.phase}</span>
+        <button className="act-btn" style={{ marginLeft: 'auto', fontSize: 11 }} onClick={onExit}>✕ Salir</button>
+      </div>
+
+      {/* ── OPPONENT ZONE ── */}
+      <div className="opp-zone">
+        <div className="opp-label">{oppDeckName || 'Oponente'}</div>
+
+        <div className="info-bar">
+          <span className="life-val" style={{ fontSize: 17, color: (oppState?.life ?? 20) <= 5 ? 'var(--red)' : 'var(--green)' }}>
+            ❤️ {oppState?.life ?? '—'}
+          </span>
+          {oppState?.poison > 0 && <span className="zone-pill">☠ {oppState.poison}</span>}
+          <div className="gh-sep" />
+          <span className="zone-pill" onClick={() => setModal({ title:'💀 Cementerio rival', cards: oppState?.graveyard ?? [], readOnly: true })}>
+            💀 {oppState?.graveyard?.length ?? 0}
+          </span>
+          <span className="zone-pill" onClick={() => setModal({ title:'🌌 Exilio rival', cards: oppState?.exile ?? [], readOnly: true })}>
+            🌌 {oppState?.exile?.length ?? 0}
+          </span>
+          <span className="zone-pill">📚 {oppState?.libraryCount ?? 0}</span>
+          <span className="zone-pill">✋ {oppState?.handCount ?? 0}</span>
+        </div>
+
+        <div className="bf-wrap" style={{ flex: 1 }}>
+          <ZoneCol
+            libraryCount={oppState?.libraryCount ?? 0}
+            graveyard={oppState?.graveyard ?? []}
+            onLibClick={() => {}}
+            onGyClick={() => oppState?.graveyard?.length && setModal({ title:'💀 Cementerio rival', cards: oppState.graveyard, readOnly: true })}
+            readOnly
+          />
+          <div className="bf">
+            {oppSp.length === 0 && oppLand.length === 0 && <div className="empty-hint">Campo del oponente</div>}
+            {oppSp.map(c => <BfCard key={c.uid} card={c} onZoom={setZoom} readOnly />)}
+          </div>
+          <div className="bf lands">
+            <div className="bf-label">Tierras</div>
+            {oppLand.map(c => <BfCard key={c.uid} card={c} onZoom={setZoom} readOnly />)}
+          </div>
+        </div>
+
+        <div className="opp-hand">
+          {Array.from({ length: oppState?.handCount ?? 0 }).map((_, i) => <div key={i} className="face-down" />)}
+          {!oppState && <span style={{ fontSize: 10, color: 'var(--text2)', opacity: .45 }}>Sin conexión</span>}
+        </div>
+      </div>
+
+      {/* ── STACK ZONE ── */}
+      {(state.stack.length > 0 || (oppState?.stack?.length ?? 0) > 0) && (() => {
+        const myStack  = state.stack;
+        const oppStack = oppState?.stack ?? [];
+        const hasOppPending = oppStack.length > 0;
+        return (
+          <div className={`stack-zone${hasOppPending ? ' active' : ''}`}>
+            <div className="stack-header">⚡ Pila de hechizos</div>
+
+            {/* Mis cartas lanzadas — esperando respuesta del rival */}
+            {myStack.map(c => (
+              <div key={c.uid} className="stack-entry">
+                {c.img && <img className="stack-img" src={c.img} alt={c.name} onError={e => e.target.style.display='none'} />}
+                <div style={{ flex:1, minWidth:0 }}>
+                  <div className="stack-name">{c.name}</div>
+                  <div className="stack-type">{c.typeLine}</div>
+                </div>
+                <span className="stack-who mine">Yo</span>
+                <div className="stack-acts">
+                  {/* Solitario: resolver/contrahechizar tú mismo */}
+                  {!conn && <>
+                    <button className="stack-btn accept" onClick={() => resolveStack(c.uid, c.name)}>✅ Resolver</button>
+                    <button className="stack-btn counter" onClick={() => selfCounter(c.uid, c.name)}>⚡ Responder</button>
+                  </>}
+                  {/* Conectado: solo cancelar */}
+                  {conn && <span style={{ fontSize:10, color:'var(--text2)', fontStyle:'italic' }}>Esperando…</span>}
+                  <button className="stack-btn cancel" onClick={() => cancelCast(c.uid, c.name)}>↩ Cancelar</button>
+                </div>
+              </div>
+            ))}
+
+            {/* Cartas del rival — yo debo responder */}
+            {oppStack.map(c => (
+              <div key={c.uid} className="stack-entry opp-entry">
+                {c.img && <img className="stack-img" src={c.img} alt={c.name} onError={e => e.target.style.display='none'} />}
+                <div style={{ flex:1, minWidth:0 }}>
+                  <div className="stack-name">{c.name}</div>
+                  <div className="stack-type">{c.typeLine}</div>
+                </div>
+                <span className="stack-who opp">{oppDeckName || 'Rival'}</span>
+                <div className="stack-acts">
+                  <button className="stack-btn accept" onClick={() => acceptOppSpell(c.uid, c.name)}>✅ Resolver</button>
+                  <button className="stack-btn counter" onClick={() => counterOppSpell(c.uid, c.name)}>⚡ Responder</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        );
+      })()}
+
+      {/* ── PHASE BAR ── */}
+      <div className="phase-bar">
+        {PHASES.map((ph, i) => (
+          <React.Fragment key={ph.id}>
+            {i > 0 && <div className="ph-sep" />}
+            <button className={`ph-btn${state.phase === ph.id ? ' active' : ''}`}
+              onClick={() => { dispatch({ type:'SET_PHASE', phase: ph.id }); sendLog(`→ ${ph.lbl}`); }}>
+              {ph.lbl}
+            </button>
+          </React.Fragment>
+        ))}
+        <div className="gh-sep" style={{ margin: '0 6px' }} />
+        <span className={`turn-pill ${state.isMyTurn ? 'turn-mine' : 'turn-theirs'}`}>
+          {state.isMyTurn ? '⚔️ Tu turno' : '⏳ Turno rival'}
+        </span>
+      </div>
+
+      {/* ── PLAYER ZONE ── */}
+      <div className="player-zone">
+
+        {/* Battlefield */}
+        <div className="bf-wrap" style={{ flex: 1, minHeight: 0 }}>
+          <ZoneCol
+            library={state.library}
+            graveyard={state.graveyard}
+            onLibClick={() => setLibModal(true)}
+            onGyClick={() => setModal({
+              title: '💀 Mi cementerio', cards: state.graveyard, readOnly: false,
+              onAction: c => { setModal(null); setCtx({ ...midCtx, items: zoneCtxItems(c) }); }
+            })}
+          />
+          <div className="bf">
+            <div className="bf-label">Mi campo · clic = ver carta · clic derecho = opciones · doble clic = girar</div>
+            {spells.length === 0 && <div className="empty-hint">Clic en carta de mano = jugar · clic derecho = opciones</div>}
+            {spells.map(c => <BfCard key={c.uid} card={c} onZoom={setZoom} onTap={tapCard} onCtx={bfCtx} />)}
+          </div>
+          <div className="bf lands">
+            <div className="bf-label">Tierras</div>
+            {lands.map(c => <BfCard key={c.uid} card={c} onZoom={setZoom} onTap={tapCard} onCtx={bfCtx} />)}
+          </div>
+        </div>
+
+        {/* Hand */}
+        <div className="hand-bar">
+          {state.hand.length === 0
+            ? <div style={{ fontSize: 11, color: 'var(--text2)', opacity: .45, alignSelf: 'center', padding: '0 8px' }}>
+                {state.library.length > 0 ? '— Mano vacía · Robar —' : '— Biblioteca vacía —'}
+              </div>
+            : state.hand.map(card => (
+              <div key={card.uid} className="hand-card"
+                onClick={() => playCard(card.uid)}
+                onContextMenu={e => handCtx(e, card)}>
+                {card.img
+                  ? <img src={card.img} alt={card.name} onError={e => { e.target.style.display = 'none'; }} />
+                  : <div className="no-img">{card.name}</div>
+                }
+              </div>
+            ))
+          }
+        </div>
+
+        {/* Info bar (life + zones) */}
+        <div className="info-bar bottom">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+            <button className="life-btn" onClick={() => changeLife(-1)}>−</button>
+            {lifeEdit
+              ? <input className="input-field" autoFocus style={{ width: 50, textAlign: 'center', padding: '1px 3px', fontSize: 17, fontWeight: 800 }}
+                  value={lifeVal} onChange={e => setLifeVal(e.target.value)}
+                  onBlur={() => { const v = parseInt(lifeVal); if (!isNaN(v)) { act({ type:'CHANGE_LIFE', d: v - state.life }, `vida → ${v}`); } setLifeEdit(false); }}
+                  onKeyDown={e => e.key === 'Enter' && e.target.blur()} />
+              : <span className={`life-val${state.life <= 5 ? ' low' : ''}`} onClick={() => { setLifeVal(String(state.life)); setLifeEdit(true); }}>{state.life}</span>
+            }
+            <button className="life-btn" onClick={() => changeLife(+1)}>＋</button>
+          </div>
+          {state.poison > 0 && <span className="zone-pill" style={{ cursor:'pointer' }} onClick={() => act({ type:'CHANGE_POISON', d:-1 }, 'pierde contador veneno')}>☠ {state.poison}</span>}
+          <div className="gh-sep" />
+          <span className="zone-pill" onClick={() => setModal({
+            title: '💀 Mi cementerio', cards: state.graveyard, readOnly: false,
+            onAction: c => { setModal(null); setCtx({ ...midCtx, items: zoneCtxItems(c) }); }
+          })}>💀 {state.graveyard.length}</span>
+          <span className="zone-pill" onClick={() => setModal({
+            title: '🌌 Mi exilio', cards: state.exile, readOnly: false,
+            onAction: c => { setModal(null); setCtx({ ...midCtx, items: [
+              { type:'label', text:c.name },
+              { icon:'✋', text:'A la mano', fn:()=>move(c.uid,'hand',c.name) },
+              { icon:'⚡', text:'Al campo',  fn:()=>move(c.uid,'battlefield',c.name) },
+            ]}); }
+          })}>🌌 {state.exile.length}</span>
+          <span className="zone-pill" onClick={() => setLibModal(true)}>
+            📚 {state.library.length}
+          </span>
+          <span className="zone-pill" style={{ opacity:.7 }} onClick={() => act({ type:'SHUFFLE' }, 'baraja su biblioteca')} title="Barajar">
+            🔀
+          </span>
+        </div>
+
+        {/* Action bar */}
+        <div className="action-bar">
+          <button className="act-btn hl" onClick={draw} disabled={!state.library.length}>📥 Robar</button>
+          <button className="act-btn"    onClick={untapAll}>↺ Desgirar todo</button>
+          {state.hand.length === 0 && state.library.length >= 7 && (
+            <button className="act-btn" style={{ borderColor:'var(--accent)', color:'var(--accent)' }}
+              onClick={() => act({ type:'DRAW_N', n:7 }, 'toma mano inicial (7)')}>
+              🤚 Mano inicial
+            </button>
+          )}
+          {state.hand.length > 0 && state.library.length > 0 && (
+            <button className="act-btn" onClick={() => act({ type:'MULLIGAN' }, `mulligan → ${Math.max(0, state.hand.length-1)} cartas`)}>
+              🔄 Mulligan ({Math.max(0, state.hand.length - 1)})
+            </button>
+          )}
+          <button className="act-btn" onClick={() => act({ type:'CHANGE_POISON', d:1 }, 'recibe contador de veneno')}>☠ +Veneno</button>
+          <button className={`act-btn${state.isMyTurn ? ' go' : ''}`} onClick={passTurn} disabled={!state.isMyTurn}>
+            ⏭ Pasar turno
+          </button>
+        </div>
+
+        {/* Log */}
+        <div className="log-panel">
+          {log.slice(-12).reverse().map(e => <div key={e.id} className={`log-line ${e.type}`}>{e.msg}</div>)}
+        </div>
+      </div>
+
+      {/* Overlays */}
+      {ctx      && <CtxMenu menu={ctx} onClose={() => setCtx(null)} />}
+      {modal    && <ZoneModal title={modal.title} cards={modal.cards} readOnly={modal.readOnly} onAction={modal.onAction} onClose={() => setModal(null)} />}
+      {libModal && <LibraryModal library={state.library} graveyard={state.graveyard} onClose={() => setLibModal(false)} onDispatch={dispatch} onLog={sendLog} />}
+      {zoom  && (
+        <CardZoom
+          card={zoom}
+          onClose={() => setZoom(null)}
+          onTap={!zoom._readOnly && state.battlefield.some(c => c.uid === zoom.uid) ? tapCard : null}
+          onCtx={!zoom._readOnly && state.battlefield.some(c => c.uid === zoom.uid) ? (e, c) => { bfCtx(e, c); } : null}
+        />
+      )}
+      {conn && !connected && (
+        <div className="disc-overlay">
+          <span style={{ fontSize: 38 }}>⚠️</span>
+          <span style={{ fontSize: 16, fontWeight: 700 }}>Oponente desconectado</span>
+          <div style={{ display:'flex', gap:10 }}>
+            <button className="btn btn-secondary" onClick={() => setConnected('solo')}>Continuar solo</button>
+            <button className="btn btn-danger"    onClick={onExit}>Salir</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════
+   LOADING SCREEN
+═══════════════════════════════════════════════ */
+function LoadingScreen({ deck, onReady, onBack }) {
+  const [prog, setProg] = useState({ done: 0, total: 1 });
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    expandDeck(deck.entries, (done, total) => { if (!cancelled) setProg({ done, total }); })
+      .then(cards => { if (!cancelled) onReady(cards); })
+      .catch(() => { if (!cancelled) setError('Error cargando cartas. Reintenta.'); });
+    return () => { cancelled = true; };
+  }, []);
+
+  const pct = prog.total > 0 ? Math.round(prog.done / prog.total * 100) : 0;
+  return (
+    <div className="screen-center">
+      <div className="logo">⚔ Kaza's Grimoire</div>
+      <div className="card-panel">
+        <div className="panel-title">Cargando {deck.name}…</div>
+        <div className="progress-bar"><div className="progress-fill" style={{ width: `${pct}%` }} /></div>
+        <div style={{ fontSize: 12, color: 'var(--text2)', textAlign: 'center' }}>{prog.done} / {prog.total} cartas · {pct}%</div>
+        {error && <div style={{ color: 'var(--red)', fontSize: 12 }}>{error}</div>}
+        <button className="btn btn-secondary" onClick={onBack}>← Cancelar</button>
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════
+   DECK SELECT SCREEN
+═══════════════════════════════════════════════ */
+function DeckSelect({ conn, isHost, onStart, onBack }) {
+  const [decks]    = useState(() => { try { return JSON.parse(localStorage.getItem('mtg_decks') || '[]'); } catch { return []; } });
+  const [sel, setSel] = useState(null);
+  const [myReady, setMyReady]   = useState(false);
+  const [oppInfo, setOppInfo]   = useState(null);
+  const [oppReady, setOppReady] = useState(false);
+
+  useEffect(() => {
+    if (!conn) return;
+    const fn = d => {
+      if (d.type === 'DECK_READY')   { setOppInfo({ name: d.name, format: d.format }); setOppReady(true); }
+      if (d.type === 'DECK_UNREADY') { setOppInfo(null); setOppReady(false); }
+    };
+    conn.on('data', fn);
+    return () => conn.off('data', fn);
+  }, [conn]);
+
+  useEffect(() => {
+    if (myReady && (oppReady || !conn) && sel) onStart(sel, oppInfo?.name || 'Solitario');
+  }, [myReady, oppReady, sel, conn, oppInfo, onStart]);
+
+  const ready = () => {
+    if (!sel) return;
+    setMyReady(true);
+    if (conn && conn.open) try { conn.send({ type:'DECK_READY', name:sel.name, format:sel.format||'' }); } catch {}
+    if (!conn) onStart(sel, 'Solitario');
+  };
+  const unready = () => { setMyReady(false); if (conn && conn.open) try { conn.send({ type:'DECK_UNREADY' }); } catch {} };
+
+  const fmtWarn = oppInfo && sel?.format && oppInfo.format && sel.format !== oppInfo.format;
+
+  return (
+    <div className="screen-center">
+      <div className="logo">⚔ Kaza's Grimoire</div>
+      <div className="card-panel" style={{ maxWidth: 520 }}>
+        <div className="panel-title">Elige tu mazo</div>
+
+        {decks.length === 0
+          ? <div style={{ color:'var(--text2)', fontSize:13, textAlign:'center', padding:16 }}>
+              No hay mazos. Importa uno en la colección primero.
+              <br/><a href="coleccion.html" style={{ color:'var(--accent2)' }}>← Ir a colección</a>
+            </div>
+          : <div style={{ display:'flex', flexDirection:'column', gap:8, maxHeight:320, overflowY:'auto' }}>
+              {decks.map(d => (
+                <div key={d.id} className={`deck-item${sel?.id === d.id ? ' selected':''}`}
+                  onClick={() => !myReady && setSel(d)}>
+                  <div style={{ flex:1 }}>
+                    <div style={{ fontWeight:600, fontSize:14 }}>{d.name}</div>
+                    <div style={{ fontSize:11, color:'var(--text2)', marginTop:2 }}>
+                      {d.entries.reduce((s,e)=>s+e.qty,0)} cartas · {d.entries.length} distintas
+                    </div>
+                  </div>
+                  {d.format && <span className="format-badge">{d.format}</span>}
+                </div>
+              ))}
+            </div>
+        }
+
+        {fmtWarn && (
+          <div style={{ background:'rgba(248,113,113,.1)', border:'1px solid rgba(248,113,113,.38)', borderRadius:8, padding:'7px 12px', fontSize:12, color:'var(--red)' }}>
+            ⚠️ Formatos distintos: tú ({sel.format}) vs rival ({oppInfo.format})
+          </div>
+        )}
+
+        {conn && (
+          <div style={{ background:'var(--surface2)', border:'1px solid var(--border)', borderRadius:8, padding:'9px 13px', fontSize:12, display:'flex', alignItems:'center', gap:8 }}>
+            <div className={`conn-dot ${oppReady ? 'on' : 'wait'}`} />
+            {oppReady
+              ? <span style={{ color:'var(--green)' }}>Rival listo: {oppInfo?.name}{oppInfo?.format ? ` (${oppInfo.format})`:''}</span>
+              : <span style={{ color:'var(--text2)' }}>Esperando que el rival elija mazo…</span>
+            }
+          </div>
+        )}
+
+        <div style={{ display:'flex', gap:8 }}>
+          <button className="btn btn-secondary" onClick={onBack}>← Volver</button>
+          {myReady
+            ? <button className="btn btn-secondary" style={{ flex:1 }} onClick={unready}>Cancelar listo</button>
+            : <button className="btn btn-primary"   style={{ flex:1 }} disabled={!sel} onClick={ready}>
+                {conn ? '¡Listo! ✔' : '▶ Jugar solo'}
+              </button>
+          }
+        </div>
+        {myReady && conn && <div style={{ textAlign:'center', fontSize:12, color:'var(--text2)' }}>Esperando rival…</div>}
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════
+   LOBBY SCREEN
+═══════════════════════════════════════════════ */
+function Lobby({ onConnected, onSolo }) {
+  const [mode, setMode] = useState(null); // null | 'host' | 'joining' | 'join'
+  const [code, setCode] = useState('');
+  const [joinCode, setJoinCode] = useState('');
+  const [status, setStatus] = useState('');
+  const [error, setError] = useState('');
+  const peerRef = useRef(null);
+
+  useEffect(() => () => { if (peerRef.current) try { peerRef.current.destroy(); } catch {} }, []);
+
+  const createGame = () => {
+    setError('');
+    const roomCode = Math.random().toString(36).slice(2, 8).toUpperCase();
+    setCode(roomCode);
+    setMode('host');
+    setStatus('Conectando…');
+    const p = new Peer(`kazagame-${roomCode}`);
+    peerRef.current = p;
+    p.on('open', () => setStatus('Esperando oponente…'));
+    p.on('error', err => {
+      if (err.type === 'unavailable-id') { setError('Código ocupado. Reintenta.'); setMode(null); }
+      else setError(`Error: ${err.type}`);
+    });
+    p.on('connection', c => {
+      c.on('open', () => { setStatus('¡Conectado!'); setTimeout(() => onConnected(c, true), 500); });
+      c.on('error', () => setError('Error de conexión'));
+    });
+  };
+
+  const joinGame = () => {
+    if (!joinCode.trim()) return;
+    setError('');
+    setMode('join');
+    setStatus('Conectando…');
+    const p = new Peer();
+    peerRef.current = p;
+    p.on('open', () => {
+      const c = p.connect(`kazagame-${joinCode.trim().toUpperCase()}`, { reliable: true });
+      c.on('open', () => { setStatus('¡Conectado!'); setTimeout(() => onConnected(c, false), 500); });
+      c.on('error', () => setError('No se pudo conectar. Verifica el código.'));
+    });
+    p.on('error', err => setError(`Error: ${err.type}`));
+  };
+
+  const cancel = () => { setMode(null); setCode(''); setError(''); if (peerRef.current) try { peerRef.current.destroy(); peerRef.current = null; } catch {} };
+
+  if (!mode) return (
+    <div className="screen-center">
+      <div className="logo">⚔ Kaza's Grimoire</div>
+      <div style={{ fontFamily:"'Cinzel Decorative',serif", fontSize:12, color:'var(--text2)', marginTop:-14 }}>Mesa de Juego</div>
+      <div className="card-panel">
+        <div className="panel-title">¿Cómo quieres jugar?</div>
+        <button className="btn btn-primary" style={{ fontSize:15, padding:14 }} onClick={createGame}>🏠 Crear partida</button>
+        <button className="btn btn-secondary" style={{ fontSize:15, padding:14 }} onClick={() => setMode('joining')}>🔗 Unirse a partida</button>
+        <div style={{ height:1, background:'var(--border)' }} />
+        <button className="btn btn-secondary" style={{ opacity:.7 }} onClick={onSolo}>🧙 Modo solitario</button>
+        <a href="coleccion.html" style={{ textAlign:'center', fontSize:12, color:'var(--text2)', textDecoration:'none' }}>← Volver a colección</a>
+      </div>
+    </div>
+  );
+
+  if (mode === 'joining') return (
+    <div className="screen-center">
+      <div className="logo">⚔ Kaza's Grimoire</div>
+      <div className="card-panel">
+        <div className="panel-title">Unirse a partida</div>
+        <input className="input-field" placeholder="Código de sala (6 letras)" value={joinCode}
+          onChange={e => setJoinCode(e.target.value.toUpperCase())} maxLength={6}
+          onKeyDown={e => e.key === 'Enter' && joinGame()}
+          style={{ fontSize:24, textAlign:'center', letterSpacing:8, fontFamily:'monospace', fontWeight:800 }} />
+        {error && <div style={{ color:'var(--red)', fontSize:12 }}>{error}</div>}
+        <button className="btn btn-primary" onClick={joinGame} disabled={joinCode.length < 4}>Conectar →</button>
+        <button className="btn btn-secondary" onClick={cancel}>← Volver</button>
+      </div>
+    </div>
+  );
+
+  if (mode === 'join') return (
+    <div className="screen-center">
+      <div className="logo">⚔ Kaza's Grimoire</div>
+      <div className="card-panel">
+        <div className="panel-title">Conectando…</div>
+        <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:14, padding:'8px 0' }}>
+          <div className="spinner" style={{ width:34, height:34 }} />
+          <span style={{ color:'var(--text2)', fontSize:13 }}>{status}</span>
+        </div>
+        {error && <div style={{ color:'var(--red)', fontSize:12 }}>{error}</div>}
+        <button className="btn btn-secondary" onClick={cancel}>← Cancelar</button>
+      </div>
+    </div>
+  );
+
+  /* Host mode */
+  return (
+    <div className="screen-center">
+      <div className="logo">⚔ Kaza's Grimoire</div>
+      <div className="card-panel">
+        <div className="panel-title">Comparte este código con tu rival</div>
+        <div className="code-display">{code}</div>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:10 }}>
+          <div className="spinner" />
+          <span style={{ color:'var(--text2)', fontSize:13 }}>{status}</span>
+        </div>
+        {error && <div style={{ color:'var(--red)', fontSize:12 }}>{error}</div>}
+        <button className="btn btn-secondary" onClick={cancel}>← Cancelar</button>
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════
+   APP ROOT
+═══════════════════════════════════════════════ */
+function App() {
+  const [screen, setScreen] = useState('lobby'); // 'lobby'|'deck-select'|'loading'|'game'
+  const [conn,   setConn  ] = useState(null);
+  const [isHost, setIsHost] = useState(false);
+  const [selDeck, setSelDeck] = useState(null);
+  const [gameCards, setGameCards] = useState(null);
+  const [myName,  setMyName ] = useState('');
+  const [oppName, setOppName] = useState('');
+
+  const handleConnected = (c, host) => { setConn(c); setIsHost(host); setScreen('deck-select'); };
+  const handleSolo      = () => { setConn(null); setIsHost(true); setScreen('deck-select'); };
+
+  const handleStart = useCallback((deck, opp) => {
+    setSelDeck(deck); setMyName(deck.name); setOppName(opp); setScreen('loading');
+  }, []);
+
+  const handleReady = cards => { setGameCards(cards); setScreen('game'); };
+  const handleExit  = () => { setScreen('lobby'); setConn(null); setGameCards(null); setSelDeck(null); };
+
+  if (screen === 'lobby')       return <Lobby onConnected={handleConnected} onSolo={handleSolo} />;
+  if (screen === 'deck-select') return <DeckSelect conn={conn} isHost={isHost} onStart={handleStart} onBack={() => setScreen('lobby')} />;
+  if (screen === 'loading')     return <LoadingScreen deck={selDeck} onReady={handleReady} onBack={() => setScreen('deck-select')} />;
+  if (screen === 'game')        return <GameScreen conn={conn} isHost={isHost} myDeckName={myName} oppDeckName={oppName} initialCards={gameCards} onExit={handleExit} />;
+  return null;
+}
+
+ReactDOM.render(<App />, document.getElementById('root'));
+</script>
+</body>
+</html>
