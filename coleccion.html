@@ -801,40 +801,78 @@ function FoilCardImage({ src, alt, isFoil, className, onClick, onError }) {
 
 /* ─── PRINTING SELECTOR MODAL ─── */
 function PrintingModal({ cardName, onClose, onAdd, replaceMode = false }) {
-  const [printings, setPrintings] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [selected, setSelected] = useState(null);
-  const [isFoil, setIsFoil] = useState(false);
-  const [initialCount, setInitialCount] = useState(1);
-  const [editionFilter, setEditionFilter] = useState('');
+  const [activeTab,      setActiveTab]      = useState('editions'); // 'editions' | 'search'
+  const [activeCardName, setActiveCardName] = useState(cardName);   // puede cambiar si el usuario elige otra carta
 
+  // ── Editions tab ──
+  const [printings,    setPrintings]    = useState([]);
+  const [loading,      setLoading]      = useState(true);
+  const [selected,     setSelected]     = useState(null);
+  const [isFoil,       setIsFoil]       = useState(false);
+  const [initialCount, setInitialCount] = useState(1);
+  const [editionFilter,setEditionFilter]= useState('');
+
+  // ── Search tab ──
+  const [searchQ,      setSearchQ]      = useState('');
+  const [suggestions,  setSuggestions]  = useState([]);
+  const [searchLoading,setSearchLoading]= useState(false);
+  const [searchResults,setSearchResults]= useState([]); // full card results
+  const searchTimer = useRef(null);
+
+  // Fetch printings whenever activeCardName changes
   useEffect(() => {
     async function fetchPrintings() {
-      setLoading(true);
+      setLoading(true); setPrintings([]); setSelected(null);
       try {
-        // Paso 1: obtener oracle_id por nombre exacto (maneja comillas y chars especiales)
-        const namedUrl = `https://api.scryfall.com/cards/named?exact=${encodeURIComponent(cardName)}`;
+        const namedUrl = `https://api.scryfall.com/cards/named?exact=${encodeURIComponent(activeCardName)}`;
         const namedR = await fetch(namedUrl);
         const namedD = await namedR.json();
 
         let searchUrl;
         if (namedD.oracle_id) {
-          // Paso 2: buscar todas las ediciones por oracle_id (no depende de la sintaxis de quotes)
           searchUrl = `https://api.scryfall.com/cards/search?q=oracleid%3A${namedD.oracle_id}&unique=prints&order=released`;
         } else {
-          // Fallback: búsqueda directa por nombre
-          searchUrl = `https://api.scryfall.com/cards/search?q=!"${encodeURIComponent(cardName)}"&unique=prints&order=released`;
+          searchUrl = `https://api.scryfall.com/cards/search?q=!"${encodeURIComponent(activeCardName)}"&unique=prints&order=released`;
         }
 
         const r = await fetch(searchUrl);
         const d = await r.json();
-        const list = (d.data || []).reverse(); // newest first
+        const list = (d.data || []).reverse();
         setPrintings(list);
         if (list.length) setSelected(list[0]);
       } catch { setPrintings([]); } finally { setLoading(false); }
     }
     fetchPrintings();
-  }, [cardName]);
+  }, [activeCardName]);
+
+  // Debounced autocomplete for card search
+  useEffect(() => {
+    if (searchTimer.current) clearTimeout(searchTimer.current);
+    if (!searchQ.trim()) { setSuggestions([]); setSearchResults([]); return; }
+    searchTimer.current = setTimeout(async () => {
+      setSearchLoading(true);
+      try {
+        // Autocomplete for names
+        const ac = await fetch(`https://api.scryfall.com/cards/autocomplete?q=${encodeURIComponent(searchQ)}&include_extras=false`);
+        const acd = await ac.json();
+        setSuggestions(acd.data || []);
+        // Also fetch cards for preview images
+        const sr = await fetch(`https://api.scryfall.com/cards/search?q=${encodeURIComponent(searchQ)}&unique=cards&order=name&limit=12`);
+        if (sr.ok) {
+          const srd = await sr.json();
+          setSearchResults(srd.data || []);
+        }
+      } catch { setSuggestions([]); setSearchResults([]); }
+      finally { setSearchLoading(false); }
+    }, 350);
+    return () => clearTimeout(searchTimer.current);
+  }, [searchQ]);
+
+  const selectOtherCard = name => {
+    setActiveCardName(name);
+    setActiveTab('editions');
+    setSearchQ(''); setSuggestions([]); setSearchResults([]);
+  };
 
   const img = selected?.image_uris?.normal || selected?.card_faces?.[0]?.image_uris?.normal || '';
   const priceN = selected?.prices?.eur ? `€${parseFloat(selected.prices.eur).toFixed(2)}` : '—';
@@ -849,7 +887,8 @@ function PrintingModal({ cardName, onClose, onAdd, replaceMode = false }) {
     onAdd({
       uid: `${selected.id}_${isFoil}`,
       scryfallId: selected.id,
-      name: selected.name,
+      name: selected.name, // usa el nombre real de la carta seleccionada (puede ser distinta)
+      _originalName: cardName, // nombre original del entry del deck (para que DeckView sepa cuál reemplazar)
       img: imgN,
       imgS,
       typeLine: selected.type_line,
@@ -875,12 +914,108 @@ function PrintingModal({ cardName, onClose, onAdd, replaceMode = false }) {
       <div className="printing-modal" onClick={e => e.stopPropagation()}>
         {/* Header */}
         <div className="pm-header">
-          <h3>📋 Seleccionar edición — {cardName}</h3>
+          <h3>
+            {replaceMode ? '🔄 Reemplazar carta' : '📋 Seleccionar edición'}
+            {' — '}
+            <span style={{color:'var(--accent)'}}>{activeCardName}</span>
+            {activeCardName !== cardName && (
+              <span style={{fontSize:'11px',color:'var(--text2)',marginLeft:6,fontWeight:400}}>
+                (original: {cardName})
+              </span>
+            )}
+          </h3>
           <button className="icon-btn" onClick={onClose}>✕</button>
         </div>
 
-        {/* Body */}
-        <div className="pm-body">
+        {/* Tabs — solo en replaceMode */}
+        {replaceMode && (
+          <div style={{display:'flex',borderBottom:'1px solid var(--border)',flexShrink:0}}>
+            {[
+              { id:'editions', lbl:'📋 Ediciones' },
+              { id:'search',   lbl:'🔍 Otra carta' },
+            ].map(t => (
+              <button key={t.id} onClick={() => setActiveTab(t.id)} style={{
+                flex:1, padding:'9px 6px', fontSize:'12px', fontWeight:700,
+                background:'transparent', border:'none', borderBottom: activeTab===t.id ? '3px solid var(--accent2)' : '3px solid transparent',
+                color: activeTab===t.id ? 'var(--accent2)' : 'var(--text2)', cursor:'pointer', transition:'all .12s',
+              }}>{t.lbl}</button>
+            ))}
+          </div>
+        )}
+
+        {/* ── SEARCH TAB ── */}
+        {activeTab === 'search' && (
+          <div style={{flex:1,display:'flex',flexDirection:'column',gap:10,padding:'14px',overflow:'hidden'}}>
+            <input
+              autoFocus
+              value={searchQ}
+              onChange={e => setSearchQ(e.target.value)}
+              placeholder="Buscar carta por nombre…"
+              style={{
+                width:'100%', padding:'9px 12px', borderRadius:'8px', fontSize:'14px',
+                background:'var(--surface2)', border:'1px solid var(--border)', color:'var(--text)',
+              }}
+            />
+            {searchLoading && <div style={{textAlign:'center',padding:12}}><div className="spinner"/></div>}
+
+            {/* Grid de resultados */}
+            {!searchLoading && searchResults.length > 0 && (
+              <div style={{flex:1,overflowY:'auto',display:'flex',flexWrap:'wrap',gap:10,alignContent:'flex-start'}}>
+                {searchResults.map(c => {
+                  const cImg = c.image_uris?.small || c.card_faces?.[0]?.image_uris?.small || '';
+                  return (
+                    <div key={c.id}
+                      onClick={() => selectOtherCard(c.name)}
+                      title={c.name}
+                      style={{
+                        display:'flex',flexDirection:'column',alignItems:'center',gap:4,
+                        cursor:'pointer',borderRadius:8,padding:4,
+                        border:'2px solid transparent',transition:'border-color .12s',
+                      }}
+                      onMouseEnter={e => e.currentTarget.style.borderColor='var(--accent)'}
+                      onMouseLeave={e => e.currentTarget.style.borderColor='transparent'}
+                    >
+                      {cImg
+                        ? <img src={cImg} alt={c.name} style={{width:72,borderRadius:5,boxShadow:'0 2px 8px rgba(0,0,0,.6)'}} />
+                        : <div style={{width:72,height:100,borderRadius:5,background:'var(--surface2)',border:'1px solid var(--border)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:9,color:'var(--text2)',textAlign:'center',padding:4}}>{c.name}</div>
+                      }
+                      <span style={{fontSize:9,color:'var(--text2)',textAlign:'center',maxWidth:72,lineHeight:1.2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.name}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Autocomplete list si no hay grid aun */}
+            {!searchLoading && searchResults.length === 0 && suggestions.length > 0 && (
+              <div style={{flex:1,overflowY:'auto',display:'flex',flexDirection:'column',gap:4}}>
+                {suggestions.slice(0,20).map(name => (
+                  <div key={name} onClick={() => selectOtherCard(name)}
+                    style={{
+                      padding:'8px 12px',borderRadius:7,fontSize:13,cursor:'pointer',
+                      background:'var(--surface2)',border:'1px solid var(--border)',
+                      transition:'border-color .1s',
+                    }}
+                    onMouseEnter={e => e.currentTarget.style.borderColor='var(--accent)'}
+                    onMouseLeave={e => e.currentTarget.style.borderColor='var(--border)'}
+                  >{name}</div>
+                ))}
+              </div>
+            )}
+
+            {!searchLoading && searchQ.trim() && suggestions.length === 0 && searchResults.length === 0 && (
+              <div style={{color:'var(--text2)',fontSize:13,textAlign:'center',padding:16,opacity:.6}}>Sin resultados para "{searchQ}"</div>
+            )}
+            {!searchQ.trim() && (
+              <div style={{color:'var(--text2)',fontSize:12,textAlign:'center',opacity:.5,padding:20}}>
+                Escribe el nombre de la carta que quieres usar en el deck
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── EDITIONS TAB (existing body) ── */}
+        {activeTab === 'editions' && <div className="pm-body">
           {/* Left: preview */}
           <div className="pm-preview">
             {selected ? (
@@ -974,12 +1109,13 @@ function PrintingModal({ cardName, onClose, onAdd, replaceMode = false }) {
             )}
           </div>
           </div>
-        </div>
+        </div>}
 
-        {/* Footer */}
+        {/* Footer — solo visible en pestaña ediciones */}
+        {activeTab === 'editions' && (
         <div className="pm-footer">
           <a
-            href={`https://www.cardmarket.com/es/Magic/Products/Search?searchString=${encodeURIComponent(selected?.name||cardName)}`}
+            href={`https://www.cardmarket.com/es/Magic/Products/Search?searchString=${encodeURIComponent(selected?.name||activeCardName)}`}
             target="_blank" rel="noopener noreferrer"
             style={{
               display:'inline-flex',alignItems:'center',gap:'5px',
@@ -1017,10 +1153,14 @@ function PrintingModal({ cardName, onClose, onAdd, replaceMode = false }) {
           <div style={{marginLeft:'auto',display:'flex',gap:'8px'}}>
             <button className="btn btn-secondary" onClick={onClose}>Cancelar</button>
             <button className="btn btn-primary" onClick={handleAdd} disabled={!selected}>
-              {replaceMode ? '🔄 Usar esta edición' : `Añadir ${initialCount > 1 ? `×${initialCount} ` : ''}a colección`}
+              {replaceMode
+                ? (activeCardName !== cardName ? `🔄 Usar ${activeCardName}` : '🔄 Usar esta edición')
+                : `Añadir ${initialCount > 1 ? `×${initialCount} ` : ''}a colección`
+              }
             </button>
           </div>
         </div>
+        )}{/* end footer */}
       </div>
     </div>
   );
@@ -1746,7 +1886,7 @@ function useIsMobile(bp = 640) {
   return mobile;
 }
 
-function DeckView({ deck, allCollectionCards, onReplaceEntry, onDeleteDeck, onUpdateFormat, showToast }) {
+function DeckView({ deck, allCollectionCards, onReplaceEntry, onDeleteEntry, onDeleteDeck, onUpdateFormat, showToast }) {
   const isMobile = useIsMobile();
   const [cardData, setCardData] = useState({});
   const [loadingCards, setLoadingCards] = useState(true);
@@ -2464,20 +2604,23 @@ function DeckView({ deck, allCollectionCards, onReplaceEntry, onDeleteDeck, onUp
           onClose={() => setReplacingEntry(null)}
           replaceMode={true}
           onAdd={card => {
-            // Usar replacingEntry.name como clave (igual que fetchAll) para no perder typeLine
-            const entryName = replacingEntry.name;
-            setCardData(prev => ({
-              ...prev,
-              [entryName]: {
+            const originalName = card._originalName || replacingEntry.name;
+            const newName = card.name; // puede ser la misma carta (otra edición) o una diferente
+            // Actualizar cardData: borrar entrada vieja si cambió el nombre, agregar nueva
+            setCardData(prev => {
+              const next = { ...prev };
+              if (newName !== originalName) delete next[originalName];
+              next[newName] = {
                 img: card.imgS || card.img,
                 imgNormal: card.img,
-                typeLine: prev[entryName]?.typeLine || card.typeLine,
-                manaCost: prev[entryName]?.manaCost || card.manaCost,
-                cmc: prev[entryName]?.cmc,
+                typeLine: card.typeLine || prev[originalName]?.typeLine,
+                manaCost: card.manaCost || prev[originalName]?.manaCost,
+                cmc: prev[originalName]?.cmc,
                 priceEur: card.priceEur,
-              }
-            }));
-            onReplaceEntry && onReplaceEntry(entryName, card.setCode, card.collectorNumber);
+              };
+              return next;
+            });
+            onReplaceEntry && onReplaceEntry(originalName, card.setCode, card.collectorNumber, newName);
             setReplacingEntry(null);
           }}
         />
@@ -2614,7 +2757,7 @@ function DeckView({ deck, allCollectionCards, onReplaceEntry, onDeleteDeck, onUp
                   </div>
                   <button
                     onClick={e => { e.stopPropagation(); setReplacingEntry(entry); }}
-                    title="Cambiar edición de esta carta en el deck"
+                    title="Cambiar carta o edición en el deck"
                     style={{
                       fontSize: isMobile ? '14px' : '10px',
                       padding: isMobile ? '4px 6px' : '3px 7px',
@@ -2627,6 +2770,27 @@ function DeckView({ deck, allCollectionCards, onReplaceEntry, onDeleteDeck, onUp
                     onMouseLeave={e=>{e.currentTarget.style.borderColor='var(--border)';e.currentTarget.style.color='var(--text2)';}}
                   >
                     {isMobile ? '🔄' : <span>🔄<br/>Cambiar</span>}
+                  </button>
+                  <button
+                    onClick={e => {
+                      e.stopPropagation();
+                      if (window.confirm(`¿Eliminar "${entry.name}" del deck?`)) {
+                        onDeleteEntry && onDeleteEntry(entry.name);
+                      }
+                    }}
+                    title="Eliminar esta carta del deck"
+                    style={{
+                      fontSize: isMobile ? '14px' : '10px',
+                      padding: isMobile ? '4px 6px' : '3px 7px',
+                      borderRadius:'5px', flexShrink:0,
+                      background:'var(--surface2)', border:'1px solid var(--border)',
+                      color:'var(--danger)', cursor:'pointer', lineHeight:1.4,
+                      transition:'border-color .12s, opacity .12s',
+                    }}
+                    onMouseEnter={e=>{e.currentTarget.style.borderColor='var(--danger)';e.currentTarget.style.opacity='.8';}}
+                    onMouseLeave={e=>{e.currentTarget.style.borderColor='var(--border)';e.currentTarget.style.opacity='1';}}
+                  >
+                    {isMobile ? '🗑️' : <span>🗑️<br/>Eliminar</span>}
                   </button>
                 </div>
               );
@@ -2893,16 +3057,31 @@ function CollectionSection({ showToast }) {
               deck={activeDeck}
               allCollectionCards={allCollectionCards}
               showToast={showToast}
-              onReplaceEntry={(entryName, newSet, newNumber) => {
+              onReplaceEntry={(entryName, newSet, newNumber, newCardName) => {
                 setDecks(prev => prev.map(d =>
                   d.id !== activeDeck.id ? d : {
                     ...d,
                     entries: d.entries.map(e =>
-                      e.name === entryName ? { ...e, set: newSet, number: newNumber } : e
+                      e.name === entryName
+                        ? { ...e, name: newCardName || e.name, set: newSet, number: newNumber }
+                        : e
                     )
                   }
                 ));
-                showToast(`🔄 ${entryName} → ${newSet}`);
+                if (newCardName && newCardName !== entryName) {
+                  showToast(`🔄 ${entryName} → ${newCardName} (${newSet})`);
+                } else {
+                  showToast(`🔄 ${entryName} → ${newSet}`);
+                }
+              }}
+              onDeleteEntry={entryName => {
+                setDecks(prev => prev.map(d =>
+                  d.id !== activeDeck.id ? d : {
+                    ...d,
+                    entries: d.entries.filter(e => e.name !== entryName)
+                  }
+                ));
+                showToast(`🗑️ ${entryName} eliminada del deck`);
               }}
               onDeleteDeck={() => deleteDeck(activeDeck.id)}
               onUpdateFormat={fmt => {
