@@ -180,6 +180,7 @@
     .stack-header { font-size: 10px; font-weight: 800; color: var(--accent2); letter-spacing: .5px; text-transform: uppercase; padding: 0 2px; }
     .stack-entry { display: flex; align-items: center; gap: 8px; background: rgba(0,0,0,.38); border-radius: 8px; padding: 5px 9px; border: 1px solid rgba(139,92,246,.3); }
     .stack-entry.opp-entry { border-color: rgba(248,113,113,.45); background: rgba(248,113,113,.06); }
+    .stack-entry.search-entry { border-color: rgba(74,222,128,.45); background: rgba(74,222,128,.06); }
     .stack-img { width: 34px; border-radius: 4px; flex-shrink: 0; box-shadow: 0 2px 6px rgba(0,0,0,.6); }
     .stack-name { font-size: 12px; font-weight: 700; line-height: 1.2; }
     .stack-type { font-size: 10px; color: var(--text2); margin-top: 1px; }
@@ -271,6 +272,44 @@
 const { useState, useEffect, useReducer, useRef, useCallback, useMemo } = React;
 
 /* ═══════════════════════════════════════════════
+   WEBRTC ICE CONFIG
+   STUN: múltiples proveedores para mejor cobertura
+   TURN: relay para cuando NAT impide conexión directa
+═══════════════════════════════════════════════ */
+const ICE_CONFIG = {
+  iceServers: [
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'stun:stun2.l.google.com:19302' },
+    { urls: 'stun:stun3.l.google.com:19302' },
+    { urls: 'stun:stun4.l.google.com:19302' },
+    { urls: 'stun:stun.cloudflare.com:3478' },
+    { urls: 'stun:stun.relay.metered.ca:80' },
+    {
+      urls: 'turn:global.relay.metered.ca:80',
+      username: 'openrelayproject',
+      credential: 'openrelayproject',
+    },
+    {
+      urls: 'turn:global.relay.metered.ca:80?transport=tcp',
+      username: 'openrelayproject',
+      credential: 'openrelayproject',
+    },
+    {
+      urls: 'turn:global.relay.metered.ca:443',
+      username: 'openrelayproject',
+      credential: 'openrelayproject',
+    },
+    {
+      urls: 'turns:global.relay.metered.ca:443?transport=tcp',
+      username: 'openrelayproject',
+      credential: 'openrelayproject',
+    },
+  ],
+  iceCandidatePoolSize: 10,
+};
+
+/* ═══════════════════════════════════════════════
    UTILITIES
 ═══════════════════════════════════════════════ */
 const uid = () => Math.random().toString(36).slice(2, 10);
@@ -326,7 +365,7 @@ const isLand = c => (c.typeLine || '').toLowerCase().includes('land');
    GAME REDUCER
    [EXTEND] Agregar nuevas acciones aquí
 ═══════════════════════════════════════════════ */
-const INIT = { life: 20, poison: 0, library: [], hand: [], battlefield: [], graveyard: [], exile: [], stack: [], phase: 'main1', turnNumber: 1, isMyTurn: false };
+const INIT = { life: 20, poison: 0, library: [], hand: [], battlefield: [], graveyard: [], exile: [], stack: [], phase: 'main1', turnNumber: 1, isMyTurn: false, pendingSearch: false, revealHand: false };
 
 // True if card resolves to battlefield (not instant/sorcery)
 const resolveToField = c => {
@@ -361,6 +400,10 @@ function reducer(state, action) {
         battlefield: [...state.battlefield, { ...card, tapped: false, counters: [], summoningSick: false, attacking: false, blocking: false }],
       };
     }
+    case 'SEARCH_STACK': {
+      const entry = { uid: action.uid, name: 'Buscar en biblioteca', typeLine: '— Acción —', isSearch: true, img: '' };
+      return { ...state, stack: [...state.stack, entry] };
+    }
     case 'CAST': {
       // Non-land: goes to the stack to await opponent confirmation
       const card = state.hand.find(c => c.uid === action.uid);
@@ -372,6 +415,9 @@ function reducer(state, action) {
       const card = state.stack.find(c => c.uid === action.uid);
       if (!card) return state;
       const newStack = state.stack.filter(c => c.uid !== action.uid);
+      if (card.isSearch) {
+        return { ...state, stack: newStack, pendingSearch: true };
+      }
       if (resolveToField(card)) {
         return { ...state, stack: newStack, battlefield: [...state.battlefield, { ...card, tapped: false, counters: [], summoningSick: !isLand(card), attacking: false, blocking: false }] };
       }
@@ -389,6 +435,12 @@ function reducer(state, action) {
       if (!card) return state;
       return { ...state, stack: state.stack.filter(c => c.uid !== action.uid), hand: [...state.hand, card] };
     }
+    case 'CLEAR_SEARCH':
+      return { ...state, pendingSearch: false };
+    case 'REVEAL_HAND':
+      return { ...state, revealHand: true };
+    case 'HIDE_HAND':
+      return { ...state, revealHand: false };
     case 'TAP':
       return { ...state, battlefield: state.battlefield.map(c => c.uid === action.uid ? { ...c, tapped: !c.tapped } : c) };
     case 'UNTAP_ALL':
@@ -457,13 +509,15 @@ function reducer(state, action) {
   }
 }
 
-/* State shared with opponent (hides hand) */
+/* State shared with opponent (hides hand unless revealHand=true) */
 function pub(s) {
   return {
     life: s.life, poison: s.poison, handCount: s.hand.length,
     battlefield: s.battlefield, graveyard: s.graveyard, exile: s.exile,
     libraryCount: s.library.length, phase: s.phase, turnNumber: s.turnNumber, isMyTurn: s.isMyTurn,
-    stack: s.stack, // public — opponent can see what was cast
+    stack: s.stack,
+    revealHand: s.revealHand,
+    hand: s.revealHand ? s.hand : undefined, // solo se comparte si el jugador decide mostrarla
   };
 }
 
@@ -551,7 +605,7 @@ function ZoneModal({ title, cards, readOnly, onAction, onClose }) {
 }
 
 /* ── Library Modal (Buscar / Scry / Mill / Investigate) ── */
-function LibraryModal({ library, graveyard, onClose, onDispatch, onLog }) {
+function LibraryModal({ library, graveyard, onClose, onDispatch, onLog, conn }) {
   const [tab, setTab]       = useState('buscar');
   const [search, setSearch] = useState('');
   const [scryN, setScryN]   = useState(3);
@@ -578,6 +632,12 @@ function LibraryModal({ library, graveyard, onClose, onDispatch, onLog }) {
     onDispatch({ type:'TUTOR', uid:card.uid, to, shuffle: doShuffle });
     onLog(`busca ${card.name} → ${to === 'hand' ? 'mano' : 'campo'}${doShuffle ? ' (baraja)' : ''}`);
     setTutorCard(null);
+    onClose();
+  };
+
+  const requestSearch = () => {
+    onDispatch({ type: 'SEARCH_STACK', uid: `search_${Date.now()}` });
+    onLog('solicita buscar en su biblioteca');
     onClose();
   };
 
@@ -630,24 +690,44 @@ function LibraryModal({ library, graveyard, onClose, onDispatch, onLog }) {
           {/* ── BUSCAR ── */}
           {tab === 'buscar' && (
             <div className="lib-body">
-              <input className="lib-search" placeholder="Buscar carta por nombre…" value={search} onChange={e => setSearch(e.target.value)} autoFocus />
-              <div style={{ fontSize:11, color:'var(--text2)', opacity:.6 }}>
-                {filtered.length} carta{filtered.length !== 1 ? 's' : ''} · Clic = ver · doble clic = tutorear a mano
-              </div>
-              <div className="lib-grid">
-                {filtered.map(c => (
-                  <div key={c.uid} className="lib-card-item"
-                    onClick={() => setZoom(c)}
-                    onDoubleClick={() => setTutorCard(c)}>
-                    {c.img
-                      ? <img src={c.img} alt={c.name} onError={e => e.target.style.display='none'} />
-                      : <div className="lib-card-no-img">{c.name}</div>
-                    }
-                    <div className="lib-name">{c.name}</div>
+              {conn ? (
+                /* Modo 1v1: búsqueda requiere aprobación del oponente */
+                <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:18, paddingTop:24 }}>
+                  <div style={{ fontSize:40 }}>🔍</div>
+                  <div style={{ textAlign:'center' }}>
+                    <div style={{ fontWeight:700, fontSize:15, marginBottom:6 }}>Buscar en biblioteca</div>
+                    <div style={{ fontSize:12, color:'var(--text2)', lineHeight:1.6 }}>
+                      Envía la acción al stack.<br/>
+                      El oponente debe <strong>Resolver</strong> para que puedas buscar.
+                    </div>
                   </div>
-                ))}
-                {filtered.length === 0 && <div style={{ color:'var(--text2)', opacity:.5, padding:12 }}>Sin resultados</div>}
-              </div>
+                  <button className="btn btn-primary" style={{ fontSize:14, padding:'10px 24px' }} onClick={requestSearch}>
+                    🔍 Solicitar búsqueda
+                  </button>
+                </div>
+              ) : (
+                /* Modo solitario: búsqueda directa */
+                <>
+                  <input className="lib-search" placeholder="Buscar carta por nombre…" value={search} onChange={e => setSearch(e.target.value)} autoFocus />
+                  <div style={{ fontSize:11, color:'var(--text2)', opacity:.6 }}>
+                    {filtered.length} carta{filtered.length !== 1 ? 's' : ''} · Clic = ver · doble clic = tutorear a mano
+                  </div>
+                  <div className="lib-grid">
+                    {filtered.map(c => (
+                      <div key={c.uid} className="lib-card-item"
+                        onClick={() => setZoom(c)}
+                        onDoubleClick={() => setTutorCard(c)}>
+                        {c.img
+                          ? <img src={c.img} alt={c.name} onError={e => e.target.style.display='none'} />
+                          : <div className="lib-card-no-img">{c.name}</div>
+                        }
+                        <div className="lib-name">{c.name}</div>
+                      </div>
+                    ))}
+                    {filtered.length === 0 && <div style={{ color:'var(--text2)', opacity:.5, padding:12 }}>Sin resultados</div>}
+                  </div>
+                </>
+              )}
             </div>
           )}
 
@@ -736,7 +816,8 @@ function LibraryModal({ library, graveyard, onClose, onDispatch, onLog }) {
             {tutorCard.img && <img src={tutorCard.img} alt={tutorCard.name} style={{ width:120, borderRadius:8, alignSelf:'center' }} />}
             <button className="btn btn-primary"   onClick={() => doTutor(tutorCard, 'hand',        true )}>✋ A la mano (baraja el resto)</button>
             <button className="btn btn-secondary" onClick={() => doTutor(tutorCard, 'hand',        false)}>✋ A la mano (sin barajar)</button>
-            <button className="btn btn-secondary" onClick={() => doTutor(tutorCard, 'battlefield', true )}>⚡ Al campo (baraja el resto)</button>
+            <button className="btn btn-secondary" onClick={() => doTutor(tutorCard, 'battlefield', true )}>⚡ Search &amp; Play (al campo directamente, baraja)</button>
+            <button className="btn btn-secondary" onClick={() => doTutor(tutorCard, 'battlefield', false)}>⚡ Search &amp; Play (al campo directamente, sin barajar)</button>
             <button className="btn btn-danger"    onClick={() => setTutorCard(null)}>✕ Cancelar</button>
           </div>
         </div>
@@ -744,6 +825,79 @@ function LibraryModal({ library, graveyard, onClose, onDispatch, onLog }) {
 
       {/* Zoom inside library modal */}
       {zoom && <CardZoom card={zoom} onClose={() => setZoom(null)} />}
+    </>
+  );
+}
+
+/* ── Search Library Modal — aparece cuando pendingSearch=true tras resolución del stack ── */
+function SearchLibraryModal({ library, onClose, onDispatch, onLog }) {
+  const [search, setSearch] = useState('');
+  const [selectedCard, setSelectedCard] = useState(null);
+
+  const filtered = useMemo(() => {
+    const q = search.toLowerCase().trim();
+    return q ? library.filter(c => c.name.toLowerCase().includes(q)) : library;
+  }, [library, search]);
+
+  const doTutor = (card, to, doShuffle) => {
+    onDispatch({ type: 'TUTOR', uid: card.uid, to, shuffle: doShuffle });
+    onDispatch({ type: 'CLEAR_SEARCH' });
+    onLog(`tutoreó ${card.name} → ${to === 'hand' ? 'mano' : 'campo'}${doShuffle ? ' (baraja)' : ''}`);
+    onClose();
+  };
+
+  return (
+    <>
+      <div className="modal-bg" onClick={onClose}>
+        <div className="lib-modal-box" onClick={e => e.stopPropagation()}>
+          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'12px 16px 0' }}>
+            <span style={{ fontFamily:"'Cinzel Decorative',serif", fontSize:13 }}>🔍 Buscando en biblioteca ({library.length})</span>
+            <button className="act-btn" onClick={onClose}>✕</button>
+          </div>
+
+          <div className="lib-body">
+            <input
+              className="lib-search"
+              placeholder="Buscar carta por nombre…"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              autoFocus
+            />
+            <div style={{ fontSize:11, color:'var(--text2)', opacity:.6 }}>
+              {filtered.length} carta{filtered.length !== 1 ? 's' : ''} — clic para seleccionar
+            </div>
+            <div className="lib-grid">
+              {filtered.map(c => (
+                <div key={c.uid} className="lib-card-item"
+                  style={{ outline: selectedCard?.uid === c.uid ? '2px solid var(--accent2)' : 'none', borderRadius:6 }}
+                  onClick={() => setSelectedCard(c)}>
+                  {c.img
+                    ? <img src={c.img} alt={c.name} onError={e => e.target.style.display='none'} />
+                    : <div className="lib-card-no-img">{c.name}</div>
+                  }
+                  <div className="lib-name">{c.name}</div>
+                </div>
+              ))}
+              {filtered.length === 0 && <div style={{ color:'var(--text2)', opacity:.5, padding:12 }}>Sin resultados</div>}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Destination picker */}
+      {selectedCard && (
+        <div className="modal-bg" onClick={() => setSelectedCard(null)} style={{ zIndex: 820 }}>
+          <div className="card-panel" style={{ maxWidth: 320 }} onClick={e => e.stopPropagation()}>
+            <div className="panel-title">Tutorear: {selectedCard.name}</div>
+            {selectedCard.img && <img src={selectedCard.img} alt={selectedCard.name} style={{ width:120, borderRadius:8, alignSelf:'center' }} />}
+            <button className="btn btn-primary"   onClick={() => doTutor(selectedCard, 'hand', true)}>✋ A la mano (baraja el resto)</button>
+            <button className="btn btn-secondary" onClick={() => doTutor(selectedCard, 'hand', false)}>✋ A la mano (sin barajar)</button>
+            <button className="btn btn-secondary" onClick={() => doTutor(selectedCard, 'battlefield', true)}>⚡ Search &amp; Play — al campo (baraja)</button>
+            <button className="btn btn-secondary" onClick={() => doTutor(selectedCard, 'battlefield', false)}>⚡ Search &amp; Play — al campo (sin barajar)</button>
+            <button className="btn btn-danger"    onClick={() => setSelectedCard(null)}>✕ Cancelar</button>
+          </div>
+        </div>
+      )}
     </>
   );
 }
@@ -1097,8 +1251,25 @@ function GameScreen({ conn, isHost, myDeckName, oppDeckName, initialCards, onExi
         </div>
 
         <div className="opp-hand">
-          {Array.from({ length: oppState?.handCount ?? 0 }).map((_, i) => <div key={i} className="face-down" />)}
-          {!oppState && <span style={{ fontSize: 10, color: 'var(--text2)', opacity: .45 }}>Sin conexión</span>}
+          {oppState?.revealHand && oppState?.hand?.length > 0
+            ? <>
+                <span style={{ fontSize:9, color:'#f87171', fontWeight:700, alignSelf:'center', marginRight:4, whiteSpace:'nowrap' }}>
+                  👁 Mano revelada
+                </span>
+                {oppState.hand.map(card => (
+                  <div key={card.uid} className="hand-card" style={{ cursor:'default' }} onClick={() => setZoom(card)}>
+                    {card.img
+                      ? <img src={card.img} alt={card.name} onError={e => { e.target.style.display='none'; }} />
+                      : <div className="no-img">{card.name}</div>
+                    }
+                  </div>
+                ))}
+              </>
+            : <>
+                {Array.from({ length: oppState?.handCount ?? 0 }).map((_, i) => <div key={i} className="face-down" />)}
+                {!oppState && <span style={{ fontSize: 10, color: 'var(--text2)', opacity: .45 }}>Sin conexión</span>}
+              </>
+          }
         </div>
       </div>
 
@@ -1113,8 +1284,11 @@ function GameScreen({ conn, isHost, myDeckName, oppDeckName, initialCards, onExi
 
             {/* Mis cartas lanzadas — esperando respuesta del rival */}
             {myStack.map(c => (
-              <div key={c.uid} className="stack-entry">
-                {c.img && <img className="stack-img" src={c.img} alt={c.name} onError={e => e.target.style.display='none'} />}
+              <div key={c.uid} className={`stack-entry${c.isSearch ? ' search-entry' : ''}`}>
+                {c.isSearch
+                  ? <span style={{ fontSize:20 }}>🔍</span>
+                  : c.img && <img className="stack-img" src={c.img} alt={c.name} onError={e => e.target.style.display='none'} />
+                }
                 <div style={{ flex:1, minWidth:0 }}>
                   <div className="stack-name">{c.name}</div>
                   <div className="stack-type">{c.typeLine}</div>
@@ -1124,7 +1298,7 @@ function GameScreen({ conn, isHost, myDeckName, oppDeckName, initialCards, onExi
                   {/* Solitario: resolver/contrahechizar tú mismo */}
                   {!conn && <>
                     <button className="stack-btn accept" onClick={() => resolveStack(c.uid, c.name)}>✅ Resolver</button>
-                    <button className="stack-btn counter" onClick={() => selfCounter(c.uid, c.name)}>⚡ Responder</button>
+                    {!c.isSearch && <button className="stack-btn counter" onClick={() => selfCounter(c.uid, c.name)}>⚡ Responder</button>}
                   </>}
                   {/* Conectado: solo cancelar */}
                   {conn && <span style={{ fontSize:10, color:'var(--text2)', fontStyle:'italic' }}>Esperando…</span>}
@@ -1135,8 +1309,11 @@ function GameScreen({ conn, isHost, myDeckName, oppDeckName, initialCards, onExi
 
             {/* Cartas del rival — yo debo responder */}
             {oppStack.map(c => (
-              <div key={c.uid} className="stack-entry opp-entry">
-                {c.img && <img className="stack-img" src={c.img} alt={c.name} onError={e => e.target.style.display='none'} />}
+              <div key={c.uid} className={`stack-entry opp-entry${c.isSearch ? ' search-entry' : ''}`}>
+                {c.isSearch
+                  ? <span style={{ fontSize:20 }}>🔍</span>
+                  : c.img && <img className="stack-img" src={c.img} alt={c.name} onError={e => e.target.style.display='none'} />
+                }
                 <div style={{ flex:1, minWidth:0 }}>
                   <div className="stack-name">{c.name}</div>
                   <div className="stack-type">{c.typeLine}</div>
@@ -1144,7 +1321,7 @@ function GameScreen({ conn, isHost, myDeckName, oppDeckName, initialCards, onExi
                 <span className="stack-who opp">{oppDeckName || 'Rival'}</span>
                 <div className="stack-acts">
                   <button className="stack-btn accept" onClick={() => acceptOppSpell(c.uid, c.name)}>✅ Resolver</button>
-                  <button className="stack-btn counter" onClick={() => counterOppSpell(c.uid, c.name)}>⚡ Responder</button>
+                  {!c.isSearch && <button className="stack-btn counter" onClick={() => counterOppSpell(c.uid, c.name)}>⚡ Responder</button>}
                 </div>
               </div>
             ))}
@@ -1211,6 +1388,22 @@ function GameScreen({ conn, isHost, myDeckName, oppDeckName, initialCards, onExi
               </div>
             ))
           }
+          {/* Botón revelar mano — solo en 1v1 */}
+          {conn && (
+            <button
+              onClick={() => act({ type: state.revealHand ? 'HIDE_HAND' : 'REVEAL_HAND' }, state.revealHand ? 'oculta su mano' : 'muestra su mano al rival')}
+              title={state.revealHand ? 'Ocultar mano al rival' : 'Mostrar mano al rival'}
+              style={{
+                alignSelf: 'center', flexShrink: 0, marginLeft: 6,
+                fontSize: 11, padding: '4px 8px', borderRadius: 6,
+                background: state.revealHand ? 'rgba(248,113,113,.18)' : 'var(--surface2)',
+                border: `1px solid ${state.revealHand ? 'rgba(248,113,113,.6)' : 'var(--border)'}`,
+                color: state.revealHand ? '#f87171' : 'var(--text2)', cursor: 'pointer',
+              }}
+            >
+              {state.revealHand ? '🙈 Ocultar mano' : '👁 Mostrar mano'}
+            </button>
+          )}
         </div>
 
         {/* Info bar (life + zones) */}
@@ -1278,7 +1471,15 @@ function GameScreen({ conn, isHost, myDeckName, oppDeckName, initialCards, onExi
       {/* Overlays */}
       {ctx      && <CtxMenu menu={ctx} onClose={() => setCtx(null)} />}
       {modal    && <ZoneModal title={modal.title} cards={modal.cards} readOnly={modal.readOnly} onAction={modal.onAction} onClose={() => setModal(null)} />}
-      {libModal && <LibraryModal library={state.library} graveyard={state.graveyard} onClose={() => setLibModal(false)} onDispatch={dispatch} onLog={sendLog} />}
+      {libModal && <LibraryModal library={state.library} graveyard={state.graveyard} onClose={() => setLibModal(false)} onDispatch={dispatch} onLog={sendLog} conn={conn} />}
+      {state.pendingSearch && (
+        <SearchLibraryModal
+          library={state.library}
+          onClose={() => dispatch({ type: 'CLEAR_SEARCH' })}
+          onDispatch={dispatch}
+          onLog={sendLog}
+        />
+      )}
       {zoom  && (
         <CardZoom
           card={zoom}
@@ -1485,8 +1686,9 @@ function Lobby({ onConnected, onSolo }) {
   const [copied, setCopied]   = useState(false);
   const peerRef    = useRef(null);
   const cancelRef  = useRef(false); // prevent state updates after cancel
-  const MAX_RETRIES = 6;
-  const RETRY_MS    = 2500;
+  const MAX_RETRIES = 4;
+  const RETRY_MS    = 3000;
+  const CONN_TIMEOUT = 25000; // 25s — TURN relay puede tardar bastante
 
   useEffect(() => () => {
     cancelRef.current = true;
@@ -1498,7 +1700,7 @@ function Lobby({ onConnected, onSolo }) {
     setError(''); cancelRef.current = false;
     const roomCode = Math.random().toString(36).slice(2, 8).toUpperCase();
     setCode(roomCode); setMode('host'); setStatus('Registrando sala…');
-    const p = new Peer(`kazagame-${roomCode}`, { debug: 0 });
+    const p = new Peer(`kazagame-${roomCode}`, { debug: 0, config: ICE_CONFIG });
     peerRef.current = p;
     p.on('open', () => { if (!cancelRef.current) setStatus('Sala lista — comparte el código'); });
     p.on('error', err => {
@@ -1526,7 +1728,7 @@ function Lobby({ onConnected, onSolo }) {
     // Destroy previous peer before creating a new one
     if (peerRef.current) { try { peerRef.current.destroy(); } catch {} peerRef.current = null; }
 
-    const p = new Peer({ debug: 0 });
+    const p = new Peer({ debug: 0, config: ICE_CONFIG });
     peerRef.current = p;
     let done = false;
 
@@ -1537,11 +1739,12 @@ function Lobby({ onConnected, onSolo }) {
       p.destroy();
       if (attempt < MAX_RETRIES) { doJoin(attempt + 1); }
       else { setError('No se pudo conectar tras varios intentos. Verifica el código.'); setMode('joining'); }
-    }, 7000);
+    }, CONN_TIMEOUT);
 
     p.on('open', () => {
       if (cancelRef.current) { clearTimeout(giveUp); return; }
       const target = `kazagame-${joinCode.trim().toUpperCase()}`;
+      setStatus('Sala encontrada — estableciendo conexión…');
       const c = p.connect(target, { reliable: true, serialization: 'json' });
 
       c.on('open', () => {
